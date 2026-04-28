@@ -72,10 +72,12 @@ export function useKeyboard({ containerRef, engine, enabled = true }: UseKeyboar
 
       // =============================================
       // Ignore grid shortcuts if user is currently typing in an input
-      // (Search bar, Comment popover, Edit cell, etc.)
       // =============================================
       const activeEl = document.activeElement as HTMLElement | null;
-      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT' || activeEl.isContentEditable)) {
+      const isInputFocused = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT' || activeEl.isContentEditable);
+      
+      // ยอมให้กด Tab ขณะพิมพ์เพื่อให้ไหลข้ามช่องไปข้างหน้าได้
+      if (isInputFocused && e.key !== 'Tab') {
         return;
       }
 
@@ -173,13 +175,34 @@ export function useKeyboard({ containerRef, engine, enabled = true }: UseKeyboar
           eng.stopEditing();
         }
 
+        const currentRows = eng.rows;
         const cols = eng.columns;
+        const rowIdx = currentRows.findIndex((r) => r.id === focus.rowId);
         const colIdx = cols.findIndex((c) => c.id === focus.colId);
-        const nextColIdx = e.shiftKey ? colIdx - 1 : colIdx + 1;
+        
+        let newRowIdx = rowIdx;
+        let newColIdx = e.shiftKey ? colIdx - 1 : colIdx + 1;
 
-        if (nextColIdx >= 0 && nextColIdx < cols.length) {
-          eng.selectCell({ rowId: focus.rowId, colId: cols[nextColIdx].id });
+        if (newColIdx >= cols.length) {
+          newColIdx = 0;
+          newRowIdx = Math.min(currentRows.length - 1, rowIdx + 1);
+        } else if (newColIdx < 0) {
+          newColIdx = cols.length - 1;
+          newRowIdx = Math.max(0, rowIdx - 1);
         }
+
+        const newPos = { rowId: currentRows[newRowIdx].id, colId: cols[newColIdx].id };
+        eng.selectCell(newPos);
+
+        // คืนโฟกัสให้ Container เพื่อไม่ให้ติดอยู่ในช่องเก่า
+        if (containerRef.current) {
+          (containerRef.current as HTMLElement).focus();
+        }
+
+        setTimeout(() => {
+          const el = document.getElementById(`cs-cell-${newPos.rowId}-${newPos.colId}`);
+          if (el) el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+        }, 10);
         return;
       }
 
@@ -216,6 +239,11 @@ export function useKeyboard({ containerRef, engine, enabled = true }: UseKeyboar
           eng.selectRange(anchor, newPos);
         } else {
           eng.selectCell(newPos);
+        }
+
+        // คืนโฟกัสให้ Container
+        if (containerRef.current) {
+          (containerRef.current as HTMLElement).focus();
         }
 
         // Auto-Scroll ให้หน้าจอตามไปที่ช่องที่เลือก (ใช้ delay ทิ้งช่วงให้ DOM update เล็กน้อย)

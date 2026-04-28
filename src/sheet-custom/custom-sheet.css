@@ -105,6 +105,7 @@
   cursor: default;
 }
 .cs-th:last-child { border-right: none; }
+.cs-th:active { background: #e2e8f0; opacity: 0.85; }
 .cs-th.dragging { opacity: 0.5; background: #dbeafe; }
 .cs-th.drag-over { border-left: 3px solid #3b82f6; }
 
@@ -181,6 +182,7 @@
   user-select: none;
 }
 .cs-td-row-num:hover { background: #e2e8f0; color: #475569; }
+.cs-td-row-num:active { background: #cbd5e1; opacity: 0.85; }
 
 /* ---- Cell ---- */
 .cs-td {

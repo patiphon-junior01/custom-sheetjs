@@ -180,10 +180,10 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
           if (!cell || cell.disabled || !cell.editable || col?.locked) return;
           
           let parsedValue = value;
-          const effectiveMode = col?.dataType || cell.mode || 'text';
+          const effectiveMode = col?.dataType || cell.mode || col?.defaultMode || 'text';
           if (effectiveMode === 'number' && typeof parsedValue !== 'number') {
              const num = Number(parsedValue);
-             if (!isNaN(num)) parsedValue = num;
+             parsedValue = !isNaN(num) ? num : 0;
           }
           if (effectiveMode === 'select' && parsedValue !== '') {
              const selectOptions = col?.options || cell.options || [];
@@ -258,10 +258,10 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
       if (!cell || cell.disabled || !cell.editable || col?.locked) return;
 
       let parsedValue = value;
-      const effectiveMode = col?.dataType || cell.mode || 'text';
+      const effectiveMode = col?.dataType || cell.mode || col?.defaultMode || 'text';
       if (effectiveMode === 'number' && typeof parsedValue !== 'number') {
          const num = Number(parsedValue);
-         if (!isNaN(num)) parsedValue = num;
+         parsedValue = !isNaN(num) ? num : 0;
       }
       if (effectiveMode === 'select' && parsedValue !== '') {
          const selectOptions = col?.options || cell.options || [];
@@ -1106,13 +1106,19 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
         const row = currentRows[rowIdx];
         const col = currentCols[colIdx];
         const cell = row.cells[col.id];
-        if (!cell || cell.disabled || !cell.editable || !cell.overwritable) continue;
+        if (!cell || cell.disabled || !cell.editable || !cell.overwritable || col?.locked) continue;
 
-        const pasteValue = grid[r][c];
+        let pasteValue: any = grid[r][c];
+        const effectiveMode = col?.dataType || cell.mode || col?.defaultMode || 'text';
 
-        // Validation พื้นฐาน: หากช่องเป็น dropdown ต้องมีค่าตรงกับที่ตั้งไว้ ไม่งั้นข้าม
-        if (cell.mode === 'select' && cell.options) {
-          const isValid = cell.options.some((opt) => String(opt.value) === String(pasteValue));
+        if (effectiveMode === 'number') {
+           const num = Number(pasteValue);
+           pasteValue = !isNaN(num) ? num : 0;
+        }
+
+        if (effectiveMode === 'select') {
+          const selectOptions = col?.options || cell.options || [];
+          const isValid = selectOptions.length === 0 || selectOptions.some((opt) => String(opt.value) === String(pasteValue));
           if (!isValid) continue;
         }
 
@@ -1120,7 +1126,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
           rowId: row.id,
           colId: col.id,
           oldValue: cell.value,
-          newValue: grid[r][c],
+          newValue: pasteValue,
         });
       }
     }

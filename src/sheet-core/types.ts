@@ -152,7 +152,8 @@ export type ActionType =
   | 'cell-cleared'
   | 'undo'
   | 'redo'
-  | 'save';
+  | 'save'
+  | 'column-props-updated';
 
 export interface ActionLog {
   id: string;
