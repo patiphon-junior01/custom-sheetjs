@@ -46,7 +46,8 @@ export type CellMode =
   | 'select'         // แสดง dropdown select
   | 'readonly'       // read-only ไม่สามารถแก้ไขได้
   | 'custom'         // ใช้ custom component
-  | 'number';        // แสดงตัวเลข
+  | 'number'         // แสดงตัวเลข
+  | 'formula';       // สูตรคำนวณ (คำนวณจากคอลัมน์อื่น)
 
 // ========== Cell ==========
 
@@ -93,6 +94,8 @@ export interface SheetColumn {
   render?: (value: any, row: SheetRow, col: SheetColumn) => React.ReactNode;
   /** รูปแบบการแสดงผลเซลล์: 'plain' = ช่องเปล่า | 'input-preview' = แสดงกรอบคล้าย input ตลอด */
   cellStyle?: 'plain' | 'input-preview';
+  /** ชุดคำสั่งสูตรคำนวณแบบ String (เช่น [baseSalary] + [bonus]) */
+  formula?: string;
 }
 
 // ========== Row ==========

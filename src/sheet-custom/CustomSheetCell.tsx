@@ -1,4 +1,5 @@
 import React, { memo, useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { Tooltip } from 'antd';
 import type { SheetCell, SheetRow, SheetColumn, CellPosition } from '../sheet-core/types';
 
 export interface CustomSheetCellProps {
@@ -19,6 +20,7 @@ export interface CustomSheetCellProps {
   onCommentClick?: (e: React.MouseEvent, pos: CellPosition) => void;
   initialValue?: string;
   cellStyle?: 'plain' | 'input-preview';
+  isFormulaDependent?: boolean;
 }
 
 export const CustomSheetCell = memo(function CustomSheetCell({
@@ -39,6 +41,7 @@ export const CustomSheetCell = memo(function CustomSheetCell({
   onCommentClick,
   initialValue,
   cellStyle = 'plain',
+  isFormulaDependent,
 }: CustomSheetCellProps) {
   const [localValue, setLocalValue] = useState(cell.value);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -113,7 +116,7 @@ export const CustomSheetCell = memo(function CustomSheetCell({
     const effectiveMode = column.dataType || cell.mode || column.defaultMode || 'text';
     const isCellLocked = column.locked || cell.disabled || !cell.editable;
     if (isCellLocked) return;
-    if (effectiveMode === 'text' || effectiveMode === 'readonly') return;
+    if (effectiveMode === 'text' || effectiveMode === 'readonly' || effectiveMode === 'formula') return;
     onStartEditing(pos);
   }, [column.locked, cell.disabled, cell.editable, column.dataType, cell.mode, column.defaultMode, onStartEditing, pos]);
 
@@ -166,7 +169,7 @@ export const CustomSheetCell = memo(function CustomSheetCell({
 
   const effectiveMode = column.dataType || cell.mode || column.defaultMode || 'text';
   const isCellLocked = column.locked || cell.disabled;
-  const isReadonlyItem = isCellLocked;
+  const isReadonlyItem = isCellLocked || effectiveMode === 'readonly' || effectiveMode === 'formula';
 
   const tdClasses = useMemo(() => {
     return [
@@ -177,12 +180,13 @@ export const CustomSheetCell = memo(function CustomSheetCell({
       isSelected ? 'selected' : '',
       isFocused ? 'focused' : '',
       isEditing ? 'editing' : '',
+      isFormulaDependent ? 'formula-dependent' : '',
       cellStyle === 'input-preview' && !isReadonlyItem ? 'cell-input-preview' : '',
       cell.className || '',
     ]
       .filter(Boolean)
       .join(' ');
-  }, [isSelected, isFocused, isCellLocked, effectiveMode, isEditing, isReadonlyItem, cellStyle, cell.className]);
+  }, [isSelected, isFocused, isCellLocked, effectiveMode, isEditing, isReadonlyItem, isFormulaDependent, cellStyle, cell.className]);
 
   // =============================================
   // RENDER: ตาม cell.mode
@@ -268,10 +272,16 @@ export const CustomSheetCell = memo(function CustomSheetCell({
       );
     }
 
-    // Mode: text / readonly -> แสดงข้อความอย่างเดียว
+    // Mode: text / readonly / formula -> แสดงข้อความอย่างเดียว
+    const textColor = effectiveMode === 'readonly' 
+       ? '#94a3b8' 
+       : effectiveMode === 'formula' 
+       ? '#0ea5e9' // สีฟ้าเพื่อบอกว่าช่องนี้มาจากการคำนวณ
+       : undefined;
+
     return (
       <div className="cs-cell-content">
-        <span className="cs-cell-text" style={effectiveMode === 'readonly' ? { color: '#94a3b8' } : undefined}>
+        <span className="cs-cell-text" style={textColor ? { color: textColor, fontWeight: effectiveMode === 'formula' ? 600 : 'normal' } : undefined}>
           {cell.value !== undefined && cell.value !== null && cell.value !== ''
             ? String(cell.value)
             : '\u00A0'}
@@ -290,7 +300,13 @@ export const CustomSheetCell = memo(function CustomSheetCell({
       onMouseDown={handleMouseDownCell}
       onMouseEnter={handleMouseEnterCell}
     >
-      {renderContent()}
+      {effectiveMode === 'formula' && column.formula ? (
+        <Tooltip title={`[สูตรอ้างอิง]: ${column.formula}`} placement="topLeft">
+          {renderContent()}
+        </Tooltip>
+      ) : (
+        renderContent()
+      )}
       {cell.comment && (
         <div
           className="cs-comment-indicator"

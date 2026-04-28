@@ -18,6 +18,7 @@ import { useUndoRedo } from './useUndoRedo';
 import {
   deepClone, moveArrayItem, insertArrayItem,
   getAllSelectedCells, isCellInSelection, generateId, expandRangesToCells,
+  computeRowFormulas
 } from './utils';
 
 /* =========================================================================
@@ -61,7 +62,7 @@ export interface UseSheetEngineReturn {
   moveColumn: (fromIndex: number, toIndex: number) => void;
   resizeColumn: (colId: string, width: number) => void;
   renameColumn: (colId: string, newTitle: string) => void;
-  updateColumnProps: (colId: string, props: Partial<Pick<SheetColumn, 'locked' | 'dataType' | 'options'>>) => void;
+  updateColumnProps: (colId: string, props: Partial<Pick<SheetColumn, 'locked' | 'dataType' | 'options' | 'formula'>>) => void;
 
   // Clipboard
   copySelection: () => void;
@@ -115,8 +116,14 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
   } = config;
 
   // Core state
-  const [rows, setRows] = useState<SheetRow[]>(() => deepClone(initialRows));
+  const [baseRows, setBaseRows] = useState<SheetRow[]>(() => deepClone(initialRows));
   const [columns, setColumns] = useState<SheetColumn[]>(() => deepClone(initialColumns));
+  
+  const rows = useMemo(() => computeRowFormulas(baseRows, columns), [baseRows, columns]);
+
+  const setRows = useCallback((action: React.SetStateAction<SheetRow[]>) => {
+    setBaseRows(action);
+  }, []);
   const [selection, setSelection] = useState<Selection>(EMPTY_SELECTION);
   const [editingCell, setEditingCell] = useState<CellPosition | null>(null);
   const [search, setSearch] = useState<SearchState>(EMPTY_SEARCH);
@@ -875,7 +882,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
   );
 
   const updateColumnProps = useCallback(
-    (colId: string, props: Partial<Pick<SheetColumn, 'locked' | 'dataType' | 'options'>>) => {
+    (colId: string, props: Partial<Pick<SheetColumn, 'locked' | 'dataType' | 'options' | 'formula'>>) => {
       const currentCols = columnsRef.current;
       const col = currentCols.find((c) => c.id === colId);
       if (!col) return;
@@ -884,6 +891,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
         locked: col.locked,
         dataType: col.dataType,
         options: col.options,
+        formula: col.formula,
       };
 
       const command: UndoableCommand = {

@@ -58,6 +58,32 @@ export default function CustomSheet({ config, virtualThreshold = 200 }: CustomSh
 
   // Multi-select drag
   const [isMouseSelecting, setIsMouseSelecting] = useState(false);
+
+  // Formula Modal State
+  const [formulaModal, setFormulaModal] = useState<{
+    isOpen: boolean;
+    colId: string;
+    initialFormula: string;
+    availableCols: { id: string; title: string }[];
+  } | null>(null);
+
+  const openFormulaModal = useCallback((colId: string) => {
+    const col = engine.columns.find(c => c.id === colId);
+    if (!col) return;
+    setFormulaModal({
+      isOpen: true,
+      colId,
+      initialFormula: col.formula || '',
+      availableCols: engine.columns.filter(c => c.id !== colId).map(c => ({ id: c.id, title: c.title }))
+    });
+  }, [engine.columns]);
+
+  const handleSaveFormula = useCallback((formula: string) => {
+    if (formulaModal) {
+      engine.updateColumnProps(formulaModal.colId, { dataType: 'formula', formula });
+      setFormulaModal(null);
+    }
+  }, [formulaModal, engine]);
   const anchorRef = useRef<CellPosition | null>(null);
 
   // Column header inline rename
@@ -107,6 +133,11 @@ export default function CustomSheet({ config, virtualThreshold = 200 }: CustomSh
     },
     []
   );
+
+  const allowInsertRow = config.allowInsertRow !== false;
+  const allowInsertColumn = config.allowInsertColumn !== false;
+  const allowDeleteRow = config.allowDeleteRow !== false;
+  const allowDeleteColumn = config.allowDeleteColumn !== false;
 
   const contextMenuItems = useMemo((): ContextMenuItem[] => {
     if (!contextMenu) return [];
@@ -167,12 +198,18 @@ export default function CustomSheet({ config, virtualThreshold = 200 }: CustomSh
         { key: 'div1', label: '', divider: true },
         { key: 'comment', label: cell?.comment ? 'ดู Comment' : 'เพิ่ม Comment', icon: 'fa-solid fa-comment', onClick: () => setCommentPopover({ position: contextMenu.position, cellPos }) },
         { key: 'div2', label: '', divider: true },
-        { key: 'insert-row-above', label: 'เพิ่มแถวด้านบน', icon: 'fa-solid fa-arrow-up', onClick: () => engine.insertRow('before', cellPos.rowId) },
-        { key: 'insert-row-below', label: 'เพิ่มแถวด้านล่าง', icon: 'fa-solid fa-arrow-down', onClick: () => engine.insertRow('after', cellPos.rowId) },
-        { key: 'insert-col-before', label: 'เพิ่มคอลัมน์ด้านซ้าย', icon: 'fa-solid fa-arrow-left', onClick: () => engine.insertColumn('before', cellPos.colId) },
-        { key: 'insert-col-after', label: 'เพิ่มคอลัมน์ด้านขวา', icon: 'fa-solid fa-arrow-right', onClick: () => engine.insertColumn('after', cellPos.colId) },
+        ...(allowInsertRow ? [
+          { key: 'insert-row-above', label: 'เพิ่มแถวด้านบน', icon: 'fa-solid fa-arrow-up', onClick: () => engine.insertRow('before', cellPos.rowId) },
+          { key: 'insert-row-below', label: 'เพิ่มแถวด้านล่าง', icon: 'fa-solid fa-arrow-down', onClick: () => engine.insertRow('after', cellPos.rowId) },
+        ] : []),
+        ...(allowInsertColumn ? [
+          { key: 'insert-col-before', label: 'เพิ่มคอลัมน์ด้านซ้าย', icon: 'fa-solid fa-arrow-left', onClick: () => engine.insertColumn('before', cellPos.colId) },
+          { key: 'insert-col-after', label: 'เพิ่มคอลัมน์ด้านขวา', icon: 'fa-solid fa-arrow-right', onClick: () => engine.insertColumn('after', cellPos.colId) },
+        ] : []),
         { key: 'div3', label: '', divider: true },
-        { key: 'delete-row', label: 'ลบแถวนี้', icon: 'fa-solid fa-trash', danger: true, disabled: !row?.deletable, onClick: () => engine.deleteRows([cellPos.rowId]) },
+        ...(allowDeleteRow ? [
+          { key: 'delete-row', label: 'ลบแถวนี้', icon: 'fa-solid fa-trash', danger: true, disabled: !row?.deletable, onClick: () => engine.deleteRows([cellPos.rowId]) }
+        ] : []),
         ...buildCustomItems('cell'),
       ];
     }
@@ -182,10 +219,14 @@ export default function CustomSheet({ config, virtualThreshold = 200 }: CustomSh
       return [
         { key: 'select-row', label: 'เลือกทั้งแถว', icon: 'fa-solid fa-arrow-right', onClick: () => engine.selectRow(cellPos.rowId) },
         { key: 'div1', label: '', divider: true },
-        { key: 'insert-above', label: 'เพิ่มแถวด้านบน', icon: 'fa-solid fa-arrow-up', onClick: () => engine.insertRow('before', cellPos.rowId) },
-        { key: 'insert-below', label: 'เพิ่มแถวด้านล่าง', icon: 'fa-solid fa-arrow-down', onClick: () => engine.insertRow('after', cellPos.rowId) },
-        { key: 'div2', label: '', divider: true },
-        { key: 'delete', label: 'ลบแถว', icon: 'fa-solid fa-trash', danger: true, disabled: !row?.deletable, onClick: () => engine.deleteRows([cellPos.rowId]) },
+        ...(allowInsertRow ? [
+          { key: 'insert-above', label: 'เพิ่มแถวด้านบน', icon: 'fa-solid fa-arrow-up', onClick: () => engine.insertRow('before', cellPos.rowId) },
+          { key: 'insert-below', label: 'เพิ่มแถวด้านล่าง', icon: 'fa-solid fa-arrow-down', onClick: () => engine.insertRow('after', cellPos.rowId) },
+          { key: 'div2', label: '', divider: true },
+        ] : []),
+        ...(allowDeleteRow ? [
+          { key: 'delete', label: 'ลบแถว', icon: 'fa-solid fa-trash', danger: true, disabled: !row?.deletable, onClick: () => engine.deleteRows([cellPos.rowId]) }
+        ] : []),
         ...buildCustomItems('row-header'),
       ];
     }
@@ -207,11 +248,16 @@ export default function CustomSheet({ config, virtualThreshold = 200 }: CustomSh
         { key: 'type-number', label: 'ตัวเลข (number)', icon: currentType === 'number' ? 'fa-solid fa-check' : 'fa-regular fa-circle', disabled: isCustomNode, onClick: () => engine.updateColumnProps(cellPos.colId, { dataType: 'number' }) },
         { key: 'type-select', label: 'ตัวเลือก (select)', icon: currentType === 'select' ? 'fa-solid fa-check' : 'fa-regular fa-circle', disabled: isCustomNode, onClick: () => engine.updateColumnProps(cellPos.colId, { dataType: 'select' }) },
         { key: 'type-readonly', label: 'ดูอย่างเดียว (readonly)', icon: currentType === 'readonly' ? 'fa-solid fa-check' : 'fa-regular fa-circle', disabled: isCustomNode, onClick: () => engine.updateColumnProps(cellPos.colId, { dataType: 'readonly' }) },
+        { key: 'type-formula', label: 'สูตรคำนวณ (formula)', icon: currentType === 'formula' ? 'fa-solid fa-check' : 'fa-regular fa-circle', disabled: isCustomNode, onClick: () => openFormulaModal(cellPos.colId) },
         { key: 'div1', label: '', divider: true },
-        { key: 'insert-before', label: 'เพิ่มคอลัมน์ด้านซ้าย', icon: 'fa-solid fa-arrow-left', onClick: () => engine.insertColumn('before', cellPos.colId) },
-        { key: 'insert-after', label: 'เพิ่มคอลัมน์ด้านขวา', icon: 'fa-solid fa-arrow-right', onClick: () => engine.insertColumn('after', cellPos.colId) },
-        { key: 'div2', label: '', divider: true },
-        { key: 'delete', label: 'ลบคอลัมน์', icon: 'fa-solid fa-trash', danger: true, disabled: col?.deletable === false, onClick: () => engine.deleteColumns([cellPos.colId]) },
+        ...(allowInsertColumn ? [
+          { key: 'insert-before', label: 'เพิ่มคอลัมน์ด้านซ้าย', icon: 'fa-solid fa-arrow-left', onClick: () => engine.insertColumn('before', cellPos.colId) },
+          { key: 'insert-after', label: 'เพิ่มคอลัมน์ด้านขวา', icon: 'fa-solid fa-arrow-right', onClick: () => engine.insertColumn('after', cellPos.colId) },
+          { key: 'div2', label: '', divider: true },
+        ] : []),
+        ...(allowDeleteColumn ? [
+          { key: 'delete', label: 'ลบคอลัมน์', icon: 'fa-solid fa-trash', danger: true, disabled: col?.deletable === false, onClick: () => engine.deleteColumns([cellPos.colId]) }
+        ] : []),
         ...buildCustomItems('col-header'),
       ];
     }
@@ -427,14 +473,17 @@ export default function CustomSheet({ config, virtualThreshold = 200 }: CustomSh
           <i className="fa-solid fa-rotate-right"></i>Redo
         </button>
 
-        <div className="cs-toolbar-sep" />
-
-        <button className="cs-toolbar-btn" onClick={() => engine.insertRow('end')} title="เพิ่มแถวท้ายสุด">
-          <i className="fa-solid fa-plus"></i>แถว
-        </button>
-        <button className="cs-toolbar-btn" onClick={() => engine.insertColumn('end')} title="เพิ่มคอลัมน์ท้ายสุด">
-          <i className="fa-solid fa-plus"></i>คอลัมน์
-        </button>
+        {(allowInsertRow || allowInsertColumn) && <div className="cs-toolbar-sep" />}
+        {allowInsertRow && (
+          <button className="cs-toolbar-btn" onClick={() => engine.insertRow('end')} title="เพิ่มแถวท้ายสุด">
+            <i className="fa-solid fa-plus"></i>แถว
+          </button>
+        )}
+        {allowInsertColumn && (
+          <button className="cs-toolbar-btn" onClick={() => engine.insertColumn('end')} title="เพิ่มคอลัมน์ท้ายสุด">
+            <i className="fa-solid fa-plus"></i>คอลัมน์
+          </button>
+        )}
 
         <div className="cs-toolbar-sep" />
 
@@ -535,6 +584,7 @@ export default function CustomSheet({ config, virtualThreshold = 200 }: CustomSh
                       }}
                     >
                       {col.title}
+                      {col.dataType === 'formula' && <i className="fa-solid fa-calculator" style={{ marginLeft: 6, fontSize: '0.75em', color: '#0ea5e9', opacity: 0.9 }}></i>}
                       {col.locked && <i className="fa-solid fa-lock" style={{ marginLeft: 6, fontSize: '0.7em', color: '#94a3b8', opacity: 0.7 }}></i>}
                     </span>
                   )}
@@ -555,6 +605,14 @@ export default function CustomSheet({ config, virtualThreshold = 200 }: CustomSh
               const isDraggingRow = dragState?.type === 'row' && dragState.fromIndex === rowIdx;
               const isDragOverTop = dragState?.type === 'row' && dragState.overIndex === rowIdx && dragState.fromIndex > rowIdx;
               const isDragOverBottom = dragState?.type === 'row' && dragState.overIndex === rowIdx && dragState.fromIndex < rowIdx;
+
+              // เช็คว่าเซลล์ที่ Focus อยู่นั้นเป็นโหมดการอ้างอิง (Formula) หรือไม่
+              const focusPos = engine.selection.focus;
+              const focusedCol = focusPos ? engine.columns.find(c => c.id === focusPos.colId) : null;
+              const isFocusedFormula = focusedCol?.dataType === 'formula' && focusedCol.formula;
+              const dependentColIds = isFocusedFormula && focusPos?.rowId === row.id
+                ? engine.columns.filter(c => focusedCol.formula?.includes(`[${c.id}]`)).map(c => c.id)
+                : [];
 
               return (
                 <tr
@@ -607,6 +665,7 @@ export default function CustomSheet({ config, virtualThreshold = 200 }: CustomSh
                             isSelected={isCellInSelection(pos, engine.selection)}
                             isFocused={!!isFocused}
                             isEditing={isEditingThis}
+                            isFormulaDependent={dependentColIds.includes(col.id)}
                             onSelect={engine.selectCell}
                             onStartEditing={engine.startEditing}
                             onStopEditing={engine.stopEditing}
@@ -650,6 +709,63 @@ export default function CustomSheet({ config, virtualThreshold = 200 }: CustomSh
           onDelete={engine.deleteComment}
           onClose={() => setCommentPopover(null)}
         />
+      )}
+
+      {/* Formula Modal */}
+      {formulaModal && formulaModal.isOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', padding: '24px', borderRadius: '8px', width: '450px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', color: '#1e293b' }}>ตั้งค่าการคำนวณ (Formula)</h3>
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: '#475569' }}>
+                สูตรคำนวณ (อ้างอิงตัวแปรในวงเล็บก้ามปู):
+              </label>
+              <textarea
+                id="cs-formula-input"
+                defaultValue={formulaModal.initialFormula}
+                placeholder="เช่น [baseSalary] + [bonus]"
+                style={{ width: '100%', height: '80px', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '4px', boxSizing: 'border-box' }}
+              />
+            </div>
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: '#475569' }}>คลิกเพื่อเพิ่มตัวแปรลงในสูตร:</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', maxHeight: '150px', overflowY: 'auto' }}>
+                {formulaModal.availableCols.map(c => (
+                  <span 
+                    key={c.id} 
+                    style={{ fontSize: '11px', background: '#f1f5f9', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', border: '1px solid #e2e8f0', color: '#334155' }}
+                    onClick={() => {
+                        const input = document.getElementById('cs-formula-input') as HTMLTextAreaElement;
+                        if(input) {
+                            input.value += `[${c.id}]`;
+                            input.focus();
+                        }
+                    }}
+                  >
+                    {c.title} <span style={{color: '#94a3b8'}}>([{c.id}])</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button
+                onClick={() => setFormulaModal(null)}
+                style={{ padding: '6px 12px', background: '#f1f5f9', border: 'none', borderRadius: '4px', cursor: 'pointer', color: '#475569' }}
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={() => {
+                   const input = document.getElementById('cs-formula-input') as HTMLTextAreaElement;
+                   if(input) handleSaveFormula(input.value);
+                }}
+                style={{ padding: '6px 12px', background: '#3b82f6', border: 'none', borderRadius: '4px', cursor: 'pointer', color: '#fff' }}
+              >
+                บันทึกคอลัมน์คำนวณ
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

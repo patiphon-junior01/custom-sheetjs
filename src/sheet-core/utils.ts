@@ -30,6 +30,50 @@ export function isCellInSelection(
 }
 
 /**
+ * คำนวณสูตรอิงตามคอลัมน์ใหม่อัตโนมัติ หากคอลัมน์ใดกำหนดโหมดเป็น formula
+ */
+export function computeRowFormulas(rows: SheetRow[], columns: SheetColumn[]): SheetRow[] {
+  const formulaCols = columns.filter(c => (c.dataType === 'formula' || c.defaultMode === 'formula') && c.formula);
+  if (formulaCols.length === 0) return rows;
+
+  return rows.map(row => {
+    let newRow: SheetRow | null = null;
+
+    for (const col of formulaCols) {
+      if (!col.formula) continue;
+      
+      let parsedFormula = col.formula;
+      // แปลง pattern [colId] ให้ดึงมาจากช่องที่อ้างอิงในบรรทัดเดียวกัน
+      const colRegex = /\[([^\]]+)\]/g;
+      
+      parsedFormula = parsedFormula.replace(colRegex, (match, colId) => {
+        const val = row.cells[colId]?.value;
+        if (val === undefined || val === null || val === '') return '0'; // Default numeric fallback for empty cells
+        return JSON.stringify(val);
+      });
+
+      let resultVal: any = '';
+      try {
+        // eslint-disable-next-line no-new-func
+        resultVal = new Function(`return ${parsedFormula}`)();
+        if (typeof resultVal === 'number') {
+           if (!isFinite(resultVal)) resultVal = '#DIV/0!';
+           else resultVal = Number(resultVal.toFixed(2)); // ป้องกันทศนิยมลอยทิ้งขยะ
+        }
+      } catch (e) {
+        resultVal = '#ERROR';
+      }
+
+      if (row.cells[col.id]?.value !== resultVal) {
+        if (!newRow) newRow = { ...row, cells: { ...row.cells } };
+        newRow.cells[col.id] = { ...newRow.cells[col.id], value: resultVal };
+      }
+    }
+    return newRow || row;
+  });
+}
+
+/**
  * ขยาย ranges ออกเป็น individual cell positions
  */
 export function expandRangesToCells(

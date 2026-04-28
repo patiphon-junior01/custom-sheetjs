@@ -138,6 +138,9 @@
   text-align: center;
   color: #94a3b8;
   background: #f8fafc;
+  position: sticky;
+  left: 0;
+  z-index: 11;
 }
 
 /* ---- Resize Handle ---- */
@@ -180,6 +183,9 @@
   padding: 0;
   cursor: pointer;
   user-select: none;
+  position: sticky;
+  left: 0;
+  z-index: 5;
 }
 .cs-td-row-num:hover { background: #e2e8f0; color: #475569; }
 .cs-td-row-num:active { background: #cbd5e1; opacity: 0.85; }
@@ -204,6 +210,11 @@
   background: #ffffff; /* ช่องโฟกัสคงสีขาวไว้ */
   box-shadow: inset 0 0 0 2px #2563eb;
   z-index: 2;
+}
+.cs-td.formula-dependent {
+  background: #f0fdf4 !important; /* พื้นหลังเขียวอ่อน */
+  box-shadow: inset 0 0 0 1px #22c55e !important; /* ขอบเขียว */
+  z-index: 1;
 }
 .cs-td.readonly-fixed.selected,
 .cs-td.readonly-fixed.focused {
