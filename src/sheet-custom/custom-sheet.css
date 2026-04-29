@@ -477,6 +477,26 @@
 .cs-context-item:hover {
   background: #f1f5f9;
 }
+.cs-context-item.has-submenu {
+  position: relative;
+}
+.cs-context-submenu {
+  display: none;
+  position: absolute;
+  top: -1px;
+  left: 100%;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  padding: 4px;
+  min-width: 180px;
+  z-index: 1001;
+  animation: cs-fade-in 0.12s ease;
+}
+.cs-context-item.has-submenu:hover > .cs-context-submenu {
+  display: block;
+}
 .cs-context-item.danger {
   color: #dc2626;
 }

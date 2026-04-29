@@ -303,6 +303,7 @@ export interface ContextMenuItem {
   danger?: boolean;
   divider?: boolean;
   onClick?: () => void;
+  children?: ContextMenuItem[];
 }
 
 // ========== Custom Context Menu (Config-level) ==========

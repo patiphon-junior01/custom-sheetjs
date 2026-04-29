@@ -526,6 +526,7 @@ export default function CustomSheetDemoPage() {
           key: "info",
           label: "ข้อมูลทั่วไป",
           icon: "fa-solid fa-circle-info",
+          allowedFormats: ["editable-text", "readonly"],
           color: "#3b82f6",
         },
       ],

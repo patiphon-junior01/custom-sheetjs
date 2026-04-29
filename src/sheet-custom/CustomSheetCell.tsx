@@ -245,6 +245,21 @@ export const CustomSheetCell = memo(function CustomSheetCell({
       );
     }
 
+    // Helper: จัดรูปแบบตัวเลขตอนแสดงผล (ไม่กระทบค่าจริงที่ใช้คำนวณ)
+    const formatDisplayValue = (val: any) => {
+      if (val === undefined || val === null || val === '') return '\u00A0';
+      if (effectiveMode === 'number' || effectiveMode === 'formula') {
+        // ลองแปลงเป็นตัวเลข ถ้าแปลงได้ให้ใส่คอมม่า
+        // ต้องเอา comma เดิมออกก่อน (ถ้ามี) เผื่อว่า val เป็น string ที่มีคอมม่าอยู่แล้ว
+        const cleanVal = typeof val === 'string' ? val.replace(/,/g, '') : val;
+        const num = Number(cleanVal);
+        if (!isNaN(num) && val !== '#DIV/0!' && val !== '#ERROR') {
+          return num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+        }
+      }
+      return String(val);
+    };
+
     // Mode: editable-text or number -> show text, double-click to edit
     if (effectiveMode === 'editable-text' || effectiveMode === 'number') {
       if (isEditing) {
@@ -264,9 +279,7 @@ export const CustomSheetCell = memo(function CustomSheetCell({
       return (
         <div className="cs-cell-content">
           <span className="cs-cell-text">
-            {cell.value !== undefined && cell.value !== null && cell.value !== ''
-              ? String(cell.value)
-              : '\u00A0'}
+            {formatDisplayValue(cell.value)}
           </span>
         </div>
       );
@@ -282,9 +295,7 @@ export const CustomSheetCell = memo(function CustomSheetCell({
     return (
       <div className="cs-cell-content">
         <span className="cs-cell-text" style={textColor ? { color: textColor, fontWeight: effectiveMode === 'formula' ? 600 : 'normal' } : undefined}>
-          {cell.value !== undefined && cell.value !== null && cell.value !== ''
-            ? String(cell.value)
-            : '\u00A0'}
+          {formatDisplayValue(cell.value)}
         </span>
       </div>
     );

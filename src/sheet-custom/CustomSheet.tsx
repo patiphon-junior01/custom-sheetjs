@@ -27,8 +27,94 @@ import { CustomSheetCell } from "./CustomSheetCell";
 import { CustomContextMenu } from "./CustomContextMenu";
 import { CustomCommentPopover } from "./CustomCommentPopover";
 import { QuestionCircleOutlined } from "@ant-design/icons";
-import { Tooltip } from "antd";
+import { Tooltip, Modal, Input, Typography, Tag, Space } from "antd";
 import "./custom-sheet.css";
+
+const { Text } = Typography;
+
+interface FormulaSetupModalProps {
+  isOpen: boolean;
+  initialFormula: string;
+  availableCols: { id: string; title: string }[];
+  onSave: (formula: string) => void;
+  onCancel: () => void;
+}
+
+function FormulaSetupModal({
+  isOpen,
+  initialFormula,
+  availableCols,
+  onSave,
+  onCancel,
+}: FormulaSetupModalProps) {
+  const [formula, setFormula] = useState(initialFormula);
+  const inputRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setFormula(initialFormula);
+    }
+  }, [isOpen, initialFormula]);
+
+  const handleInsertCol = (colId: string) => {
+    setFormula((prev) => prev + `[${colId}]`);
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  };
+
+  return (
+    <Modal
+      title="ตั้งค่าการคำนวณ (Formula)"
+      open={isOpen}
+      onOk={() => onSave(formula)}
+      onCancel={onCancel}
+      okText="บันทึกคอลัมน์คำนวณ"
+      cancelText="ยกเลิก"
+      width={500}
+    >
+      <div style={{ marginBottom: "16px", marginTop: "16px" }}>
+        <Text
+          type="secondary"
+          style={{ display: "block", marginBottom: "8px" }}
+        >
+          สูตรคำนวณ (อ้างอิงตัวแปรในวงเล็บก้ามปู):
+        </Text>
+        <Input.TextArea
+          ref={inputRef}
+          value={formula}
+          onChange={(e) => setFormula(e.target.value)}
+          placeholder="เช่น [baseSalary] + [bonus]"
+          autoSize={{ minRows: 3, maxRows: 5 }}
+        />
+      </div>
+      <div style={{ marginBottom: "8px" }}>
+        <Text
+          type="secondary"
+          style={{ display: "block", marginBottom: "8px" }}
+        >
+          คลิกเพื่อเพิ่มตัวแปรลงในสูตร:
+        </Text>
+        <Space
+          size={[8, 8]}
+          wrap
+          style={{ maxHeight: "150px", overflowY: "auto", width: "100%" }}
+        >
+          {availableCols.map((c) => (
+            <Tag
+              key={c.id}
+              color="blue"
+              style={{ cursor: "pointer", userSelect: "none" }}
+              onClick={() => handleInsertCol(c.id)}
+            >
+              {c.title} <span style={{ opacity: 0.6 }}>([{c.id}])</span>
+            </Tag>
+          ))}
+        </Space>
+      </div>
+    </Modal>
+  );
+}
 
 interface CustomSheetProps {
   config: SheetConfig;
@@ -58,6 +144,36 @@ export default function CustomSheet({
     position: { x: number; y: number };
     cellPos: CellPosition;
   } | null>(null);
+
+  // ป้องกันการปิดหน้าถ้ามีข้อมูลแก้ไขแล้วแต่ยังไม่ได้บันทึก
+  useEffect(() => {
+    if (engine.readonly) return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      const lastSaveIdx = engine.actionLogs.map((l) => l.type).lastIndexOf("save");
+
+      let hasUnsavedChanges = false;
+      for (let i = lastSaveIdx + 1; i < engine.actionLogs.length; i++) {
+        const type = engine.actionLogs[i].type;
+        if (
+          type !== "selection-changed" &&
+          type !== "sort-changed" &&
+          type !== "column-resized"
+        ) {
+          hasUnsavedChanges = true;
+          break;
+        }
+      }
+
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [engine.actionLogs, engine.readonly]);
 
   // Drag state
   const [dragState, setDragState] = useState<{
@@ -173,9 +289,11 @@ export default function CustomSheet({
   );
 
   const allowInsertRow = config.allowInsertRow !== false && !engine.readonly;
-  const allowInsertColumn = config.allowInsertColumn !== false && !engine.readonly;
+  const allowInsertColumn =
+    config.allowInsertColumn !== false && !engine.readonly;
   const allowDeleteRow = config.allowDeleteRow !== false && !engine.readonly;
-  const allowDeleteColumn = config.allowDeleteColumn !== false && !engine.readonly;
+  const allowDeleteColumn =
+    config.allowDeleteColumn !== false && !engine.readonly;
 
   const contextMenuItems = useMemo((): ContextMenuItem[] => {
     if (!contextMenu) return [];
@@ -240,7 +358,8 @@ export default function CustomSheet({
       const cell = row?.cells[cellPos.colId];
       const col = engine.columns.find((c) => c.id === cellPos.colId);
       const isColLocked = col?.locked ?? false;
-      const isReadonly = engine.readonly || isColLocked || !cell?.editable || cell?.disabled;
+      const isReadonly =
+        engine.readonly || isColLocked || !cell?.editable || cell?.disabled;
       return [
         {
           key: "edit",
@@ -390,103 +509,86 @@ export default function CustomSheet({
       const columnTags = config.columnTags || [];
       const hasColumnTags = columnTags.length > 0;
 
-      // สร้างเมนูประเภทคอลัมน์ (Column Tags) ถ้า developer กำหนดไว้
-      const tagMenuItems: ContextMenuItem[] = hasColumnTags
-        ? [
-            { key: "div-tag", label: "", divider: true },
-            {
-              key: "tag-label",
-              label: `\u0e1b\u0e23\u0e30\u0e40\u0e20\u0e17\u0e04\u0e2d\u0e25\u0e31\u0e21\u0e19\u0e4c: ${currentTag ? columnTags.find((t) => t.key === currentTag)?.label || currentTag : "\u0e44\u0e21\u0e48\u0e23\u0e30\u0e1a\u0e38"}`,
-              icon: "fa-solid fa-tags",
-              disabled: true,
-            },
-            ...columnTags.map((tag) => ({
-              key: `tag-${tag.key}`,
-              label: tag.label,
-              icon:
-                currentTag === tag.key
-                  ? "fa-solid fa-check"
-                  : tag.icon || "fa-regular fa-circle",
-              disabled: isCustomNode || engine.readonly,
-              onClick: () =>
-                engine.updateColumnProps(cellPos.colId, { columnTag: tag.key }),
-            })),
-            {
-              key: "tag-clear",
-              label:
-                "\u0e25\u0e49\u0e32\u0e07\u0e1b\u0e23\u0e30\u0e40\u0e20\u0e17",
-              icon: !currentTag ? "fa-solid fa-check" : "fa-regular fa-circle",
-              disabled: isCustomNode || engine.readonly,
-              onClick: () =>
-                engine.updateColumnProps(cellPos.colId, { columnTag: "" }),
-            },
-          ]
-        : [];
-
-      // ดู allowedFormats ของ tag ปัจจุบัน (ถ้ามี)
-      const currentTagDef = hasColumnTags
-        ? columnTags.find((t) => t.key === currentTag)
-        : null;
-      const allowedFormats: CellMode[] = currentTagDef?.allowedFormats || [
-        "editable-text",
-        "number",
-        "select",
-        "readonly",
-      ];
       const defaultFormats: { key: string; mode: CellMode; label: string }[] = [
         {
           key: "type-text",
           mode: "editable-text",
-          label: "\u0e02\u0e49\u0e2d\u0e04\u0e27\u0e32\u0e21 (editable-text)",
+          label: "ข้อความ (editable-text)",
         },
         {
           key: "type-number",
           mode: "number",
-          label: "\u0e15\u0e31\u0e27\u0e40\u0e25\u0e02 (number)",
+          label: "ตัวเลข (number)",
         },
         {
           key: "type-select",
           mode: "select",
-          label: "\u0e15\u0e31\u0e27\u0e40\u0e25\u0e37\u0e2d\u0e01 (select)",
+          label: "ตัวเลือก (select)",
         },
         {
           key: "type-readonly",
           mode: "readonly",
-          label:
-            "\u0e14\u0e39\u0e2d\u0e22\u0e48\u0e32\u0e07\u0e40\u0e14\u0e35\u0e22\u0e27 (readonly)",
+          label: "ดูอย่างเดียว (readonly)",
         },
       ];
 
-      // สร้างเมนูรูปแบบข้อมูล (Data Format)
+      // สร้างเมนูรูปแบบข้อมูล (Data Format) และแนบ Column Tags เป็น Submenu
       const formatMenuItems: ContextMenuItem[] = [
         { key: "div-type", label: "", divider: true },
         {
           key: "type-label",
-          label: `\u0e23\u0e39\u0e1b\u0e41\u0e1a\u0e1a\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25: ${currentType}`,
+          label: `รูปแบบข้อมูล: ${currentType}`,
           icon: "fa-solid fa-database",
           disabled: true,
         },
-        ...defaultFormats
-          .filter((f) => allowedFormats.includes(f.mode))
-          .map((f) => ({
+        ...defaultFormats.map((f) => {
+          // หาประเภทคอลัมน์ (Tags) ที่รองรับรูปแบบข้อมูลนี้
+          const tagsForThisFormat = columnTags.filter(
+            (tag) => !tag.allowedFormats || tag.allowedFormats.includes(f.mode)
+          );
+
+          let children: ContextMenuItem[] | undefined = undefined;
+
+          if (tagsForThisFormat.length > 0) {
+            children = [
+              {
+                key: `tag-none-${f.mode}`,
+                label: "(ไม่ระบุประเภท)",
+                icon: !currentTag && currentType === f.mode ? "fa-solid fa-check" : "fa-regular fa-circle",
+                disabled: isCustomNode || engine.readonly,
+                onClick: () => {
+                  engine.updateColumnProps(cellPos.colId, { dataType: f.mode, columnTag: "" });
+                },
+              },
+              { key: `div-sub-${f.mode}`, label: "", divider: true },
+              ...tagsForThisFormat.map((tag) => ({
+                key: `tag-${tag.key}-${f.mode}`,
+                label: tag.label,
+                icon: currentTag === tag.key && currentType === f.mode ? "fa-solid fa-check" : tag.icon || "fa-regular fa-circle",
+                disabled: isCustomNode || engine.readonly,
+                onClick: () => {
+                  engine.updateColumnProps(cellPos.colId, { dataType: f.mode, columnTag: tag.key });
+                },
+              })),
+            ];
+          }
+
+          return {
             key: f.key,
             label: f.label,
-            icon:
-              currentType === f.mode
-                ? "fa-solid fa-check"
-                : "fa-regular fa-circle",
+            icon: currentType === f.mode ? "fa-solid fa-check" : "fa-regular fa-circle",
             disabled: isCustomNode || engine.readonly,
-            onClick: () =>
-              engine.updateColumnProps(cellPos.colId, { dataType: f.mode }),
-          })),
+            children,
+            onClick: () => {
+              // ถ้าคลิกตัวแม่ตรงๆ ให้เปลี่ยนแค่รูปแบบข้อมูล
+              engine.updateColumnProps(cellPos.colId, { dataType: f.mode });
+            },
+          };
+        }),
         {
           key: "type-formula",
-          label:
-            "\u0e2a\u0e39\u0e15\u0e23\u0e04\u0e33\u0e19\u0e27\u0e13 (formula)",
-          icon:
-            currentType === "formula"
-              ? "fa-solid fa-check"
-              : "fa-regular fa-circle",
+          label: "สูตรคำนวณ (formula)",
+          icon: currentType === "formula" ? "fa-solid fa-check" : "fa-regular fa-circle",
           disabled: isCustomNode || engine.readonly,
           onClick: () => openFormulaModal(cellPos.colId),
         },
@@ -523,7 +625,6 @@ export default function CustomSheet({
           onClick: () =>
             engine.updateColumnProps(cellPos.colId, { locked: !isLocked }),
         },
-        ...tagMenuItems,
         ...formatMenuItems,
         { key: "div1", label: "", divider: true },
         ...(allowInsertColumn
@@ -866,8 +967,11 @@ export default function CustomSheet({
         {/* Sort status indicator */}
         {engine.sort.colId && (
           <span className="cs-toolbar-sort-status">
-            <i className={`fa-solid ${engine.sort.direction === 'asc' ? 'fa-arrow-up-short-wide' : 'fa-arrow-down-wide-short'}`}></i>
-            {engine.columns.find(c => c.id === engine.sort.colId)?.title || engine.sort.colId}
+            <i
+              className={`fa-solid ${engine.sort.direction === "asc" ? "fa-arrow-up-short-wide" : "fa-arrow-down-wide-short"}`}
+            ></i>
+            {engine.columns.find((c) => c.id === engine.sort.colId)?.title ||
+              engine.sort.colId}
             <button
               className="cs-sort-clear-btn"
               onClick={() => engine.clearSort()}
@@ -900,7 +1004,10 @@ export default function CustomSheet({
                     style={{
                       width: col.width,
                       minWidth: col.minWidth || 50,
-                      cursor: (col.draggable && !engine.readonly) ? "all-scroll" : "pointer",
+                      cursor:
+                        col.draggable && !engine.readonly
+                          ? "all-scroll"
+                          : "pointer",
                     }}
                     draggable={col.draggable && !engine.readonly}
                     onClick={() => engine.selectColumn(col.id)}
@@ -1002,28 +1109,26 @@ export default function CustomSheet({
                         {/* Sort Indicator */}
                         {isSortable && (
                           <span
-                            className={`cs-sort-indicator ${isSortedCol ? 'active' : ''}`}
+                            className={`cs-sort-indicator ${isSortedCol ? "active" : ""}`}
                             onClick={(e) => {
                               e.stopPropagation();
                               engine.sortColumn(col.id);
                             }}
                             title={
-                              sortDir === 'asc'
-                                ? 'เรียง: น้อยไปมาก (คลิกเพื่อเปลี่ยน)'
-                                : sortDir === 'desc'
-                                ? 'เรียง: มากไปน้อย (คลิกเพื่อยกเลิก)'
-                                : 'คลิกเพื่อเรียงข้อมูล'
+                              sortDir === "asc"
+                                ? "เรียง: น้อยไปมาก (คลิกเพื่อเปลี่ยน)"
+                                : sortDir === "desc"
+                                  ? "เรียง: มากไปน้อย (คลิกเพื่อยกเลิก)"
+                                  : "คลิกเพื่อเรียงข้อมูล"
                             }
                           >
-                            {sortDir === 'asc' && (
+                            {sortDir === "asc" && (
                               <i className="fa-solid fa-arrow-up-short-wide"></i>
                             )}
-                            {sortDir === 'desc' && (
+                            {sortDir === "desc" && (
                               <i className="fa-solid fa-arrow-down-wide-short"></i>
                             )}
-                            {!sortDir && (
-                              <i className="fa-solid fa-sort"></i>
-                            )}
+                            {!sortDir && <i className="fa-solid fa-sort"></i>}
                           </span>
                         )}
                         {(col?.title ?? "").length > 20 && (
@@ -1220,153 +1325,14 @@ export default function CustomSheet({
       )}
 
       {/* Formula Modal */}
-      {formulaModal && formulaModal.isOpen && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(0,0,0,0.5)",
-            zIndex: 9999,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <div
-            style={{
-              background: "#fff",
-              padding: "24px",
-              borderRadius: "8px",
-              width: "450px",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-            }}
-          >
-            <h3
-              style={{
-                margin: "0 0 16px 0",
-                fontSize: "16px",
-                color: "#1e293b",
-              }}
-            >
-              ตั้งค่าการคำนวณ (Formula)
-            </h3>
-            <div style={{ marginBottom: "16px" }}>
-              <label
-                style={{
-                  display: "block",
-                  marginBottom: "8px",
-                  fontSize: "13px",
-                  color: "#475569",
-                }}
-              >
-                สูตรคำนวณ (อ้างอิงตัวแปรในวงเล็บก้ามปู):
-              </label>
-              <textarea
-                id="cs-formula-input"
-                defaultValue={formulaModal.initialFormula}
-                placeholder="เช่น [baseSalary] + [bonus]"
-                style={{
-                  width: "100%",
-                  height: "80px",
-                  padding: "8px",
-                  border: "1px solid #cbd5e1",
-                  borderRadius: "4px",
-                  boxSizing: "border-box",
-                }}
-              />
-            </div>
-            <div style={{ marginBottom: "24px" }}>
-              <label
-                style={{
-                  display: "block",
-                  marginBottom: "8px",
-                  fontSize: "13px",
-                  color: "#475569",
-                }}
-              >
-                คลิกเพื่อเพิ่มตัวแปรลงในสูตร:
-              </label>
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: "6px",
-                  maxHeight: "150px",
-                  overflowY: "auto",
-                }}
-              >
-                {formulaModal.availableCols.map((c) => (
-                  <span
-                    key={c.id}
-                    style={{
-                      fontSize: "11px",
-                      background: "#f1f5f9",
-                      padding: "4px 8px",
-                      borderRadius: "4px",
-                      cursor: "pointer",
-                      border: "1px solid #e2e8f0",
-                      color: "#334155",
-                    }}
-                    onClick={() => {
-                      const input = document.getElementById(
-                        "cs-formula-input",
-                      ) as HTMLTextAreaElement;
-                      if (input) {
-                        input.value += `[${c.id}]`;
-                        input.focus();
-                      }
-                    }}
-                  >
-                    {c.title}{" "}
-                    <span style={{ color: "#94a3b8" }}>([{c.id}])</span>
-                  </span>
-                ))}
-              </div>
-            </div>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                gap: "8px",
-              }}
-            >
-              <button
-                onClick={() => setFormulaModal(null)}
-                style={{
-                  padding: "6px 12px",
-                  background: "#f1f5f9",
-                  border: "none",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  color: "#475569",
-                }}
-              >
-                ยกเลิก
-              </button>
-              <button
-                onClick={() => {
-                  const input = document.getElementById(
-                    "cs-formula-input",
-                  ) as HTMLTextAreaElement;
-                  if (input) handleSaveFormula(input.value);
-                }}
-                style={{
-                  padding: "6px 12px",
-                  background: "#3b82f6",
-                  border: "none",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  color: "#fff",
-                }}
-              >
-                บันทึกคอลัมน์คำนวณ
-              </button>
-            </div>
-          </div>
-        </div>
+      {formulaModal && (
+        <FormulaSetupModal
+          isOpen={formulaModal.isOpen}
+          initialFormula={formulaModal.initialFormula}
+          availableCols={formulaModal.availableCols}
+          onSave={handleSaveFormula}
+          onCancel={() => setFormulaModal(null)}
+        />
       )}
     </div>
   );

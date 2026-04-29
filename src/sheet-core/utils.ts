@@ -58,7 +58,9 @@ export function computeRowFormulas(rows: SheetRow[], columns: SheetColumn[]): Sh
         resultVal = new Function(`return ${parsedFormula}`)();
         if (typeof resultVal === 'number') {
            if (!isFinite(resultVal)) resultVal = '#DIV/0!';
-           else resultVal = Number(resultVal.toFixed(2)); // ป้องกันทศนิยมลอยทิ้งขยะ
+           else resultVal = Number(resultVal.toFixed(2)).toString(); // ป้องกันทศนิยมลอยทิ้งขยะ และแปลงเป็น string
+        } else if (resultVal !== null && resultVal !== undefined) {
+           resultVal = resultVal.toString();
         }
       } catch (e) {
         resultVal = '#ERROR';
