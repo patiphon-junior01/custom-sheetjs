@@ -81,6 +81,8 @@ export interface CreateFromDataOptions {
   customContextMenuItems?: SheetConfig['customContextMenuItems'];
   /** ประเภทคอลัมน์ที่ developer กำหนดได้เอง (เช่น รายได้, รายหัก) */
   columnTags?: SheetConfig['columnTags'];
+  /** โหมดอ่านอย่างเดียว (Read-only) */
+  readonly?: boolean;
   /** รองรับ properties อื่นๆ ที่ consumer ต้องการ */
   [key: string]: any;
 }
@@ -222,6 +224,7 @@ export function createSheetConfigFromData(
     defaultCellStyle: options.defaultCellStyle,
     customContextMenuItems: options.customContextMenuItems,
     columnTags: options.columnTags,
+    readonly: options.readonly,
   };
 }
 
@@ -322,6 +325,7 @@ export function createSheetConfigFromApi(
     defaultCellStyle: options.defaultCellStyle,
     customContextMenuItems: options.customContextMenuItems,
     columnTags: options.columnTags,
+    readonly: options.readonly,
   };
 }
 

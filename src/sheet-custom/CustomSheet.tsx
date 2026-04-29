@@ -172,10 +172,10 @@ export default function CustomSheet({
     [],
   );
 
-  const allowInsertRow = config.allowInsertRow !== false;
-  const allowInsertColumn = config.allowInsertColumn !== false;
-  const allowDeleteRow = config.allowDeleteRow !== false;
-  const allowDeleteColumn = config.allowDeleteColumn !== false;
+  const allowInsertRow = config.allowInsertRow !== false && !engine.readonly;
+  const allowInsertColumn = config.allowInsertColumn !== false && !engine.readonly;
+  const allowDeleteRow = config.allowDeleteRow !== false && !engine.readonly;
+  const allowDeleteColumn = config.allowDeleteColumn !== false && !engine.readonly;
 
   const contextMenuItems = useMemo((): ContextMenuItem[] => {
     if (!contextMenu) return [];
@@ -240,7 +240,7 @@ export default function CustomSheet({
       const cell = row?.cells[cellPos.colId];
       const col = engine.columns.find((c) => c.id === cellPos.colId);
       const isColLocked = col?.locked ?? false;
-      const isReadonly = isColLocked || !cell?.editable || cell?.disabled;
+      const isReadonly = engine.readonly || isColLocked || !cell?.editable || cell?.disabled;
       return [
         {
           key: "edit",
@@ -267,7 +267,7 @@ export default function CustomSheet({
           key: "paste",
           label: "วาง",
           icon: "fa-solid fa-paste",
-          disabled: isColLocked,
+          disabled: isColLocked || engine.readonly,
           onClick: () => engine.pasteFromClipboard(),
         },
         {
@@ -407,7 +407,7 @@ export default function CustomSheet({
                 currentTag === tag.key
                   ? "fa-solid fa-check"
                   : tag.icon || "fa-regular fa-circle",
-              disabled: isCustomNode,
+              disabled: isCustomNode || engine.readonly,
               onClick: () =>
                 engine.updateColumnProps(cellPos.colId, { columnTag: tag.key }),
             })),
@@ -416,7 +416,7 @@ export default function CustomSheet({
               label:
                 "\u0e25\u0e49\u0e32\u0e07\u0e1b\u0e23\u0e30\u0e40\u0e20\u0e17",
               icon: !currentTag ? "fa-solid fa-check" : "fa-regular fa-circle",
-              disabled: isCustomNode,
+              disabled: isCustomNode || engine.readonly,
               onClick: () =>
                 engine.updateColumnProps(cellPos.colId, { columnTag: "" }),
             },
@@ -475,7 +475,7 @@ export default function CustomSheet({
               currentType === f.mode
                 ? "fa-solid fa-check"
                 : "fa-regular fa-circle",
-            disabled: isCustomNode,
+            disabled: isCustomNode || engine.readonly,
             onClick: () =>
               engine.updateColumnProps(cellPos.colId, { dataType: f.mode }),
           })),
@@ -487,7 +487,7 @@ export default function CustomSheet({
             currentType === "formula"
               ? "fa-solid fa-check"
               : "fa-regular fa-circle",
-          disabled: isCustomNode,
+          disabled: isCustomNode || engine.readonly,
           onClick: () => openFormulaModal(cellPos.colId),
         },
       ];
@@ -505,7 +505,7 @@ export default function CustomSheet({
           label:
             "\u0e40\u0e1b\u0e25\u0e35\u0e48\u0e22\u0e19\u0e0a\u0e37\u0e48\u0e2d\u0e04\u0e2d\u0e25\u0e31\u0e21\u0e19\u0e4c",
           icon: "fa-solid fa-pen",
-          disabled: isLocked,
+          disabled: isLocked || engine.readonly,
           onClick: () =>
             setEditingColHeader({
               colId: cellPos.colId,
@@ -519,6 +519,7 @@ export default function CustomSheet({
             ? "\u0e1b\u0e25\u0e14\u0e25\u0e47\u0e2d\u0e04\u0e04\u0e2d\u0e25\u0e31\u0e21\u0e19\u0e4c"
             : "\u0e25\u0e47\u0e2d\u0e04\u0e04\u0e2d\u0e25\u0e31\u0e21\u0e19\u0e4c (\u0e2b\u0e49\u0e32\u0e21\u0e41\u0e01\u0e49\u0e44\u0e02)",
           icon: isLocked ? "fa-solid fa-lock-open" : "fa-solid fa-lock",
+          disabled: engine.readonly,
           onClick: () =>
             engine.updateColumnProps(cellPos.colId, { locked: !isLocked }),
         },
@@ -768,7 +769,7 @@ export default function CustomSheet({
         <button
           className="cs-toolbar-btn"
           onClick={() => engine.undo()}
-          disabled={!engine.canUndo}
+          disabled={!engine.canUndo || engine.readonly}
           title={`Undo (${formatShortcut("Mod+Z")})`}
         >
           <i className="fa-solid fa-rotate-left"></i>Undo
@@ -776,7 +777,7 @@ export default function CustomSheet({
         <button
           className="cs-toolbar-btn"
           onClick={() => engine.redo()}
-          disabled={!engine.canRedo}
+          disabled={!engine.canRedo || engine.readonly}
           title={`Redo (${formatShortcut("Mod+Y")})`}
         >
           <i className="fa-solid fa-rotate-right"></i>Redo
@@ -806,7 +807,7 @@ export default function CustomSheet({
 
         <div className="cs-toolbar-sep" />
 
-        {selectedCount > 0 && (
+        {selectedCount > 0 && !engine.readonly && (
           <>
             <button
               className="cs-toolbar-btn danger"
@@ -815,29 +816,33 @@ export default function CustomSheet({
             >
               <i className="fa-solid fa-eraser"></i>ล้างค่า
             </button>
-            <button
-              className="cs-toolbar-btn danger"
-              onClick={() => {
-                const rowIds = engine.selection.rows;
-                if (rowIds.length > 0) engine.deleteRows(rowIds);
-              }}
-              disabled={engine.selection.rows.length === 0}
-              title="ลบแถวที่เลือก"
-            >
-              <i className="fa-solid fa-trash"></i>ลบแถว
-            </button>
+            {allowDeleteRow && (
+              <button
+                className="cs-toolbar-btn danger"
+                onClick={() => {
+                  const rowIds = engine.selection.rows;
+                  if (rowIds.length > 0) engine.deleteRows(rowIds);
+                }}
+                disabled={engine.selection.rows.length === 0}
+                title="ลบแถวที่เลือก"
+              >
+                <i className="fa-solid fa-trash"></i>ลบแถว
+              </button>
+            )}
           </>
         )}
 
         <div className="cs-toolbar-sep" />
 
-        <button
-          className="cs-toolbar-btn primary"
-          onClick={() => engine.save("button")}
-          title={`บันทึก (${formatShortcut("Mod+S")})`}
-        >
-          <i className="fa-solid fa-floppy-disk"></i>บันทึก
-        </button>
+        {!engine.readonly && (
+          <button
+            className="cs-toolbar-btn primary"
+            onClick={() => engine.save("button")}
+            title={`บันทึก (${formatShortcut("Mod+S")})`}
+          >
+            <i className="fa-solid fa-floppy-disk"></i>บันทึก
+          </button>
+        )}
 
         <button
           className="cs-toolbar-btn"
@@ -895,9 +900,9 @@ export default function CustomSheet({
                     style={{
                       width: col.width,
                       minWidth: col.minWidth || 50,
-                      cursor: col.draggable ? "all-scroll" : "pointer",
+                      cursor: (col.draggable && !engine.readonly) ? "all-scroll" : "pointer",
                     }}
-                    draggable={col.draggable}
+                    draggable={col.draggable && !engine.readonly}
                     onClick={() => engine.selectColumn(col.id)}
                     onDragStart={(e) => handleColDragStart(e, colIdx)}
                     onDragOver={(e) => handleColDragOver(e, colIdx)}
@@ -962,7 +967,7 @@ export default function CustomSheet({
                         }
                         onDoubleClick={(e) => {
                           e.stopPropagation();
-                          if (col.locked) return;
+                          if (engine.readonly || col.locked) return;
                           setEditingColHeader({
                             colId: col.id,
                             title: col.title,
@@ -1210,6 +1215,7 @@ export default function CustomSheet({
           onSave={handleCommentSave}
           onDelete={engine.deleteComment}
           onClose={() => setCommentPopover(null)}
+          readonly={engine.readonly}
         />
       )}
 

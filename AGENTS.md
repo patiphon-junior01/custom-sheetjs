@@ -195,6 +195,13 @@ sheet-custom/  (UI Layer - React Components)
 3. การ sort ทำแบบสร้าง Array ใหม่ (`[...formulaRows].sort()`) เพื่อไม่ให้กระทบ `baseRows`
 4. การกด Header จะไปเรียก `engine.sortColumn(colId)` สลับ state (asc -> desc -> null)
 
+### How Read-only Mode Works
+
+1. **State Protection**: เพิ่มเช็ค `if (readonly) return;` ที่ต้นทางของฟังก์ชันที่ทำการ mutate ข้อมูลทั้งหมดใน `useSheetEngine.ts` (เช่น `setCellValue`, `insertRow`, `undo`)
+2. **UI Protection**: ส่ง `engine.readonly` ออกไปให้ `CustomSheet.tsx` ปิดการทำงาน (disabled) หรือซ่อน (hide) เมนูต่างๆ
+3. **Context Menu**: ตรวจสอบและตั้งค่า `disabled: engine.readonly` ใน Context Menu Items ที่เกี่ยวกับการแก้ไขข้อมูล
+4. **Popovers**: ใน `CustomCommentPopover` มีการรับ props `readonly` เพื่อซ่อนปุ่มและปิดการพิมพ์ข้อความ
+
 ---
 
 ## File Relationships

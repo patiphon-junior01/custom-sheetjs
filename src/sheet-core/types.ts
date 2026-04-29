@@ -279,6 +279,8 @@ export interface SheetConfig {
   defaultCellStyle?: 'plain' | 'input-preview';
   /** ประเภทคอลัมน์ที่ developer กำหนดได้เอง (เช่น รายได้, รายหัก) แต่ละประเภทเลือก format ได้ */
   columnTags?: ColumnTagDefinition[];
+  /** โหมดอ่านอย่างเดียว (Read-only) ถ้า true จะห้ามแก้ไขข้อมูล, ห้ามเพิ่ม/ลบ แถวและคอลัมน์ (ทำได้แค่ Sort, ค้นหา, ย่อขยาย) */
+  readonly?: boolean;
 }
 
 // ========== Undo/Redo Command ==========

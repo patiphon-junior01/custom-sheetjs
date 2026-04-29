@@ -13,6 +13,7 @@ interface CustomCommentPopoverProps {
   onSave: (rowId: string, colId: string, text: string) => void;
   onDelete: (rowId: string, colId: string) => void;
   onClose: () => void;
+  readonly?: boolean;
 }
 
 export const CustomCommentPopover = memo(function CustomCommentPopover({
@@ -22,6 +23,7 @@ export const CustomCommentPopover = memo(function CustomCommentPopover({
   onSave,
   onDelete,
   onClose,
+  readonly,
 }: CustomCommentPopoverProps) {
   const [text, setText] = useState(existingComment?.text || '');
   const [isEditing, setIsEditing] = useState(!existingComment);
@@ -72,16 +74,18 @@ export const CustomCommentPopover = memo(function CustomCommentPopover({
             </span>
           </div>
           <div className="cs-comment-text">{existingComment.text}</div>
-          <div className="cs-comment-actions">
-            <button className="cs-toolbar-btn" onClick={() => setIsEditing(true)}>
-              <i className="fa-solid fa-pen" style={{ fontSize: 10 }}></i>
-              แก้ไข
-            </button>
-            <button className="cs-toolbar-btn danger" onClick={handleDelete}>
-              <i className="fa-solid fa-trash" style={{ fontSize: 10 }}></i>
-              ลบ
-            </button>
-          </div>
+          {!readonly && (
+            <div className="cs-comment-actions">
+              <button className="cs-toolbar-btn" onClick={() => setIsEditing(true)}>
+                <i className="fa-solid fa-pen" style={{ fontSize: 10 }}></i>
+                แก้ไข
+              </button>
+              <button className="cs-toolbar-btn danger" onClick={handleDelete}>
+                <i className="fa-solid fa-trash" style={{ fontSize: 10 }}></i>
+                ลบ
+              </button>
+            </div>
+          )}
         </>
       ) : (
         <>
@@ -91,15 +95,18 @@ export const CustomCommentPopover = memo(function CustomCommentPopover({
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="เขียนความคิดเห็น..."
+            disabled={readonly}
           />
-          <div className="cs-comment-actions">
-            <button className="cs-toolbar-btn" onClick={onClose}>
-              ยกเลิก
-            </button>
-            <button className="cs-toolbar-btn primary" onClick={handleSave} disabled={!text.trim()}>
-              บันทึก
-            </button>
-          </div>
+          {!readonly && (
+            <div className="cs-comment-actions">
+              <button className="cs-toolbar-btn" onClick={onClose}>
+                ยกเลิก
+              </button>
+              <button className="cs-toolbar-btn primary" onClick={handleSave} disabled={!text.trim()}>
+                บันทึก
+              </button>
+            </div>
+          )}
         </>
       )}
     </div>

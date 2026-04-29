@@ -101,6 +101,7 @@ export interface UseSheetEngineReturn {
   // State
   changedCells: ChangedCell[];
   isDirty: boolean;
+  readonly: boolean;
 }
 
 /* =========================================================================
@@ -118,6 +119,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
     allowInsertColumn = true,
     allowDeleteRow = true,
     allowDeleteColumn = true,
+    readonly = false,
   } = config;
 
   // Core state
@@ -205,6 +207,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
 
   const setCellValue = useCallback(
     (rowId: string, colId: string, value: any) => {
+    if (readonly) return;
       const currentRows = rowsRef.current;
       const currentCols = columnsRef.current;
 
@@ -363,6 +366,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
   );
 
   const clearSelectedCells = useCallback(() => {
+    if (readonly) return;
     const currentRows = rowsRef.current;
     const currentCols = columnsRef.current;
     const selectedPositions = getAllSelectedCells(selectionRef.current, currentRows, currentCols);
@@ -428,6 +432,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
 
   const bulkSetValue = useCallback(
     (value: any) => {
+    if (readonly) return;
       const currentRows = rowsRef.current;
       const currentCols = columnsRef.current;
       const selectedPositions = getAllSelectedCells(selectionRef.current, currentRows, currentCols);
@@ -579,6 +584,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
   // =============================================
 
   const startEditing = useCallback((pos: CellPosition) => {
+    if (readonly) return;
     const row = rowsRef.current.find((r) => r.id === pos.rowId);
     if (!row) return;
     const col = columnsRef.current.find((c) => c.id === pos.colId);
@@ -606,6 +612,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
 
   const insertRow = useCallback(
     (position: 'before' | 'after' | 'end', referenceId?: string) => {
+    if (readonly) return;
       if (!allowInsertRow) return;
 
       const currentCols = columnsRef.current;
@@ -653,6 +660,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
 
   const deleteRows = useCallback(
     (ids: string[]) => {
+    if (readonly) return;
       if (!allowDeleteRow) return;
 
       const currentRows = rowsRef.current;
@@ -695,6 +703,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
 
   const moveRow = useCallback(
     (fromIndex: number, toIndex: number) => {
+    if (readonly) return;
       if (fromIndex === toIndex) return;
       const currentRows = rowsRef.current;
       if (fromIndex < 0 || fromIndex >= currentRows.length) return;
@@ -771,6 +780,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
 
   const deleteColumns = useCallback(
     (ids: string[]) => {
+    if (readonly) return;
       if (!allowDeleteColumn) return;
 
       const currentCols = columnsRef.current;
@@ -836,6 +846,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
 
   const moveColumn = useCallback(
     (fromIndex: number, toIndex: number) => {
+    if (readonly) return;
       if (fromIndex === toIndex) return;
 
       const command: UndoableCommand = {
@@ -893,6 +904,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
 
   const renameColumn = useCallback(
     (colId: string, newTitle: string) => {
+    if (readonly) return;
       const currentCols = columnsRef.current;
       const col = currentCols.find((c) => c.id === colId);
       if (!col) return;
@@ -964,6 +976,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
 
   const addComment = useCallback(
     (rowId: string, colId: string, text: string) => {
+    if (readonly) return;
       const comment: CellComment = {
         id: generateId('comment'),
         text,
@@ -1004,6 +1017,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
 
   const updateComment = useCallback(
     (rowId: string, colId: string, text: string) => {
+    if (readonly) return;
       const row = rowsRef.current.find((r) => r.id === rowId);
       if (!row || !row.cells[colId]?.comment) return;
 
@@ -1043,6 +1057,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
 
   const deleteComment = useCallback(
     (rowId: string, colId: string) => {
+    if (readonly) return;
       const row = rowsRef.current.find((r) => r.id === rowId);
       if (!row || !row.cells[colId]?.comment) return;
 
@@ -1124,6 +1139,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
   }, []);
 
   const pasteFromClipboard = useCallback(async () => {
+    if (readonly) return;
     let text = '';
     try {
       text = await navigator.clipboard.readText();
@@ -1290,6 +1306,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
   // =============================================
 
   const undo = useCallback(() => {
+    if (readonly) return;
     const cmd = undoRedo.undo();
     if (cmd) {
       emitAction('undo', { commandId: cmd.id, description: cmd.description }, null, null);
@@ -1297,6 +1314,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
   }, [undoRedo, emitAction]);
 
   const redo = useCallback(() => {
+    if (readonly) return;
     const cmd = undoRedo.redo();
     if (cmd) {
       emitAction('redo', { commandId: cmd.id, description: cmd.description }, null, null);
@@ -1435,5 +1453,6 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
 
     changedCells,
     isDirty,
+    readonly,
   };
 }
