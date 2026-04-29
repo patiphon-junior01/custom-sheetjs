@@ -49,6 +49,25 @@ export type CellMode =
   | 'number'         // แสดงตัวเลข
   | 'formula';       // สูตรคำนวณ (คำนวณจากคอลัมน์อื่น)
 
+// ========== Column Tag Definition ==========
+// กำหนดประเภทคอลัมน์เองได้ (เช่น รายได้, รายหัก, ข้อมูลทั่วไป)
+// แต่ละประเภทสามารถเลือก format ย่อย (number, text, select) ได้อีกที
+
+export interface ColumnTagDefinition {
+  /** key เช่น 'income', 'deduction', 'info' */
+  key: string;
+  /** ชื่อแสดงผล เช่น 'รายได้', 'รายหัก' */
+  label: string;
+  /** Font Awesome icon class เช่น 'fa-solid fa-plus' */
+  icon?: string;
+  /** สีป้ายประเภท (เช่น '#22c55e' สีเขียวสำหรับรายได้, '#ef4444' สีแดงสำหรับรายหัก) */
+  color?: string;
+  /** รูปแบบข้อมูลที่อนุญาตให้เลือก (default: ['editable-text', 'number', 'select', 'readonly']) */
+  allowedFormats?: CellMode[];
+  /** รองรับ properties เพิ่มเติม */
+  [key: string]: any;
+}
+
 // ========== Cell ==========
 
 export interface SheetCell {
@@ -67,6 +86,8 @@ export interface SheetCell {
   style?: React.CSSProperties;
   className?: string;
   placeholder?: string;
+  /** รองรับ properties อื่นๆ ที่ consumer ต้องการเก็บเพิ่ม */
+  [key: string]: any;
 }
 
 export interface SelectOption {
@@ -96,6 +117,10 @@ export interface SheetColumn {
   cellStyle?: 'plain' | 'input-preview';
   /** ชุดคำสั่งสูตรคำนวณแบบ String (เช่น [baseSalary] + [bonus]) */
   formula?: string;
+  /** ประเภทคอลัมน์ (เช่น 'income' = รายได้, 'deduction' = รายหัก, 'info' = ข้อมูลทั่วไป) */
+  columnTag?: string;
+  /** รองรับ properties อื่นๆ ที่ consumer ต้องการเก็บเพิ่ม */
+  [key: string]: any;
 }
 
 // ========== Row ==========
@@ -109,6 +134,8 @@ export interface SheetRow {
   component?: React.ComponentType<RowComponentProps>;
   /** Custom className สำหรับแถวนี้ */
   className?: string;
+  /** รองรับ properties อื่นๆ ที่ consumer ต้องการเก็บเพิ่ม */
+  [key: string]: any;
 }
 
 export interface RowComponentProps {
@@ -156,7 +183,8 @@ export type ActionType =
   | 'undo'
   | 'redo'
   | 'save'
-  | 'column-props-updated';
+  | 'column-props-updated'
+  | 'sort-changed';
 
 export interface ActionLog {
   id: string;
@@ -249,6 +277,8 @@ export interface SheetConfig {
   customContextMenuItems?: CustomContextMenuItem[];
   /** รูปแบบเซลล์เริ่มต้น: 'plain' = ช่องเปล่า | 'input-preview' = แสดงกรอบคล้าย input */
   defaultCellStyle?: 'plain' | 'input-preview';
+  /** ประเภทคอลัมน์ที่ developer กำหนดได้เอง (เช่น รายได้, รายหัก) แต่ละประเภทเลือก format ได้ */
+  columnTags?: ColumnTagDefinition[];
 }
 
 // ========== Undo/Redo Command ==========
@@ -316,6 +346,22 @@ export const EMPTY_SEARCH: SearchState = {
   results: [],
   currentIndex: -1,
   isOpen: false,
+};
+
+// ========== Sort ==========
+
+export type SortDirection = 'asc' | 'desc' | null;
+
+export interface SortState {
+  /** column ID ที่กำลัง sort อยู่ */
+  colId: string | null;
+  /** ทิศทาง: 'asc' = น้อยไปมาก, 'desc' = มากไปน้อย, null = ไม่ sort */
+  direction: SortDirection;
+}
+
+export const EMPTY_SORT: SortState = {
+  colId: null,
+  direction: null,
 };
 
 // ========== Helper: สร้าง Cell ==========

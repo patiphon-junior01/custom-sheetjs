@@ -1,17 +1,19 @@
 /* =========================================================================
-   Custom Sheet Demo Page - Version 1 (HTML Custom)
-   ข้อมูล Payroll ชุดเดิม แปลงเป็น SheetConfig
+   Custom Sheet Demo Page - Version 2 (Dynamic Data)
+   จำลองข้อมูลจาก API: ไม่ต้องรู้ type ล่วงหน้า
+   ใช้ createSheetConfigFromApi() สร้าง config อัตโนมัติ
    ========================================================================= */
 
-import { useMemo, useCallback } from "react";
+import { useMemo } from "react";
 import type {
   SheetConfig,
-  SheetRow,
-  SheetColumn,
   SavePayload,
   ActionLog,
+  ApiColumnDefinition,
+  CustomMenuContext,
+  SheetCell,
 } from "../sheet-core";
-import { createCell, createColumn, createRow } from "../sheet-core";
+import { createSheetConfigFromApi } from "../sheet-core";
 import CustomSheet from "../sheet-custom/CustomSheet";
 import PageHeader from "../components/PageHeader";
 import { Tag, Input } from "antd";
@@ -19,79 +21,117 @@ import { PlusOutlined } from "@ant-design/icons";
 import { useState, useRef, useEffect } from "react";
 
 /* =========================================================================
-   Payroll Data -> Sheet Data
+   จำลอง API Response: Column Definitions
+   ในการใช้งานจริง ส่วนนี้จะมาจาก API เช่น GET /api/payroll/columns
    ========================================================================= */
 
-function buildPayrollColumns(): SheetColumn[] {
-  return [
-    createColumn("empId", "รหัสพนักงาน", {
-      width: 110,
-      dataType: "text",
-      locked: true,
-    }), // ล็อคระดับคอลัมน์ ห้ามแก้รหัสพนักงาน
-    createColumn("empName", "ชื่อพนักงาน", {
-      width: 180,
-      dataType: "editable-text",
-    }),
-    createColumn("department", "แผนก", {
-      width: 130,
-      dataType: "editable-text",
-    }),
-    createColumn("position", "ตำแหน่ง", {
-      width: 150,
-      dataType: "editable-text",
-    }),
-    createColumn("baseSalary", "เงินเดือน", { width: 120, dataType: "number" }), // บังคับเป็นชนิดตัวเลข
-    createColumn("allowance", "เบี้ยเลี้ยง", {
-      width: 100,
-      dataType: "number",
-    }),
-    createColumn("overtime", "OT", { width: 90, dataType: "number" }),
-    createColumn("bonus", "โบนัส", { width: 100, dataType: "number" }),
-    createColumn("deductTax", "หักภาษี", { width: 100, dataType: "number" }),
-    createColumn("deductSocial", "ประกันสังคม", {
-      width: 110,
-      dataType: "number",
-    }),
-    createColumn("netPay", "สุทธิ", {
-      width: 120,
-      dataType: "readonly",
-      locked: true,
-    }), // ล็อคระดับคอลัมน์ให้ดูได้อย่างเดียว
-    createColumn("status", "สถานะ", {
-      width: 120,
-      defaultMode: "custom",
-    }),
-    createColumn("tags", "ทักษะ (Tags)", {
-      width: 250,
-      defaultMode: "custom",
-      cellStyle: "plain",
-    }),
-    createColumn("note", "หมายเหตุ", {
-      width: 180,
-      defaultMode: "editable-text",
-    }),
-  ];
-}
+const API_COLUMNS: ApiColumnDefinition[] = [
+  {
+    field: "empId",
+    label: "รหัสพนักงาน",
+    type: "text",
+    width: 110,
+    locked: true,
+    columnTag: "info",
+  },
+  {
+    field: "empName",
+    label: "ชื่อพนักงาน",
+    type: "editable-text",
+    width: 180,
+    columnTag: "info",
+  },
+  {
+    field: "department",
+    label: "แผนก",
+    type: "editable-text",
+    width: 130,
+  },
+  {
+    field: "position",
+    label: "ตำแหน่ง",
+    type: "editable-text",
+    width: 150,
+  },
+  {
+    field: "baseSalary",
+    label: "เงินเดือน",
+    type: "number",
+    width: 120,
+    columnTag: "income",
+  },
+  {
+    field: "allowance",
+    label: "เบี้ยเลี้ยง",
+    type: "number",
+    width: 100,
+    columnTag: "income",
+  },
+  {
+    field: "overtime",
+    label: "OT",
+    type: "number",
+    width: 90,
+    columnTag: "income",
+  },
+  {
+    field: "bonus",
+    label: "โบนัส",
+    type: "number",
+    width: 100,
+    columnTag: "income",
+  },
+  {
+    field: "deductTax",
+    label: "หักภาษี",
+    type: "number",
+    width: 100,
+    columnTag: "deduction",
+  },
+  {
+    field: "deductSocial",
+    label: "ประกันสังคม",
+    type: "number",
+    width: 110,
+    columnTag: "deduction",
+  },
+  {
+    field: "netPay",
+    label: "สุทธิ",
+    type: "readonly",
+    width: 120,
+    locked: true,
+  },
+  {
+    field: "status",
+    label: "สถานะ",
+    type: "custom",
+    width: 120,
+  },
+  {
+    field: "tags",
+    label: "ทักษะ (Tags)",
+    type: "custom",
+    width: 250,
+    cellStyle: "plain",
+    sortable: false, // ปิดการ sort สำหรับคอลัมน์นี้
+  },
+  {
+    field: "note",
+    label: "หมายเหตุ",
+    type: "editable-text",
+    width: 180,
+    sortable: false, // ปิดการ sort สำหรับคอลัมน์นี้
+  },
+];
 
-interface EmployeeData {
-  empId: string;
-  empName: string;
-  department: string;
-  position: string;
-  baseSalary: number;
-  allowance: number;
-  overtime: number;
-  bonus: number;
-  deductTax: number;
-  deductSocial: number;
-  status: string;
-  tags: string[];
-  note: string;
-  locked: boolean;
-}
+/* =========================================================================
+   จำลอง API Response: Row Data
+   ในการใช้งานจริง ส่วนนี้จะมาจาก API เช่น GET /api/payroll/data
+   ข้อมูลเป็น Record<string, any>[] ไม่มี type กำหนดล่วงหน้า
+   ========================================================================= */
 
-const MOCK_EMPLOYEES: EmployeeData[] = [
+const API_ROWS: Record<string, any>[] = [
   {
     empId: "EMP001",
     empName: "สมชาย สุขใจ",
@@ -103,10 +143,10 @@ const MOCK_EMPLOYEES: EmployeeData[] = [
     bonus: 10000,
     deductTax: 4200,
     deductSocial: 750,
+    netPay: 68050,
     status: "Approved",
     tags: ["React", "TypeScript", "Node.js"],
     note: "",
-    locked: true,
   },
   {
     empId: "EMP002",
@@ -119,10 +159,10 @@ const MOCK_EMPLOYEES: EmployeeData[] = [
     bonus: 15000,
     deductTax: 4200,
     deductSocial: 750,
+    netPay: 76050,
     status: "Approved",
     tags: ["Recruitment", "Payroll", "Training"],
     note: "ปรับเงินเดือนใหม่",
-    locked: true,
   },
   {
     empId: "EMP003",
@@ -135,10 +175,10 @@ const MOCK_EMPLOYEES: EmployeeData[] = [
     bonus: 5000,
     deductTax: 2100,
     deductSocial: 750,
+    netPay: 50150,
     status: "Pending",
     tags: ["Excel", "Tax", "Audit"],
     note: "",
-    locked: false,
   },
   {
     empId: "EMP004",
@@ -151,10 +191,10 @@ const MOCK_EMPLOYEES: EmployeeData[] = [
     bonus: 8000,
     deductTax: 3000,
     deductSocial: 750,
+    netPay: 60250,
     status: "Draft",
     tags: ["SEO", "Content Strategy", "Ads"],
     note: "รอตรวจสอบ OT",
-    locked: false,
   },
   {
     empId: "EMP005",
@@ -167,10 +207,10 @@ const MOCK_EMPLOYEES: EmployeeData[] = [
     bonus: 3000,
     deductTax: 1500,
     deductSocial: 750,
+    netPay: 40750,
     status: "Draft",
     tags: ["HTML", "CSS", "JS"],
     note: "",
-    locked: false,
   },
   {
     empId: "EMP006",
@@ -183,10 +223,10 @@ const MOCK_EMPLOYEES: EmployeeData[] = [
     bonus: 5000,
     deductTax: 1800,
     deductSocial: 750,
+    netPay: 40450,
     status: "Pending",
     tags: ["Management", "Booking", "Support"],
     note: "",
-    locked: false,
   },
   {
     empId: "EMP007",
@@ -199,10 +239,10 @@ const MOCK_EMPLOYEES: EmployeeData[] = [
     bonus: 7000,
     deductTax: 3200,
     deductSocial: 750,
+    netPay: 64050,
     status: "Draft",
     tags: ["AWS", "Docker", "CI/CD", "Linux"],
     note: "เพิ่งเริ่มงาน",
-    locked: false,
   },
   {
     empId: "EMP008",
@@ -215,85 +255,12 @@ const MOCK_EMPLOYEES: EmployeeData[] = [
     bonus: 20000,
     deductTax: 5500,
     deductSocial: 750,
+    netPay: 91750,
     status: "Approved",
     tags: ["B2B", "Negotiation", "Leadership"],
     note: "Top performer",
-    locked: true,
   },
 ];
-
-const STATUS_OPTIONS = [
-  { label: "Draft", value: "Draft" },
-  { label: "Pending", value: "Pending" },
-  { label: "Approved", value: "Approved" },
-  { label: "Rejected", value: "Rejected" },
-];
-
-function buildPayrollRows(): SheetRow[] {
-  const rows = MOCK_EMPLOYEES.map((emp) => {
-    const net =
-      emp.baseSalary +
-      emp.allowance +
-      emp.overtime +
-      emp.bonus -
-      emp.deductTax -
-      emp.deductSocial;
-    const isLocked = emp.locked;
-
-    return createRow(
-      {
-        empId: createCell("empId", emp.empId, {
-          mode: "text",
-          editable: false,
-          disabled: isLocked,
-        }),
-        empName: createCell("empName", emp.empName, { disabled: isLocked }),
-        department: createCell("department", emp.department, {
-          disabled: isLocked,
-        }),
-        position: createCell("position", emp.position, { disabled: isLocked }),
-        baseSalary: createCell("baseSalary", emp.baseSalary, {
-          disabled: isLocked,
-        }),
-        allowance: createCell("allowance", emp.allowance, {
-          disabled: isLocked,
-        }),
-        overtime: createCell("overtime", emp.overtime, { disabled: isLocked }),
-        bonus: createCell("bonus", emp.bonus, { disabled: isLocked }),
-        deductTax: createCell("deductTax", emp.deductTax, {
-          disabled: isLocked,
-        }),
-        deductSocial: createCell("deductSocial", emp.deductSocial, {
-          disabled: isLocked,
-        }),
-        netPay: createCell("netPay", net, {
-          mode: "readonly",
-          editable: false,
-        }),
-        status: createCell("status", emp.status, {
-          mode: "custom",
-          disabled: isLocked,
-          component: CustomStatusCellComponent,
-          className: "custom-status-cell",
-          style: { padding: 0 },
-        }),
-        tags: createCell("tags", emp.tags, {
-          mode: "custom",
-          disabled: isLocked,
-          component: CustomBadgeCellComponent,
-          className: "custom-tags-cell",
-        }),
-        note: createCell("note", emp.note, {
-          disabled: isLocked,
-          placeholder: "พิมพ์หมายเหตุ...",
-        }),
-      },
-      { deletable: !isLocked },
-    );
-  });
-
-  return rows;
-}
 
 /* =========================================================================
    Custom Cell Component ตัวอย่าง: Status วาดปุ่มเอง
@@ -505,14 +472,32 @@ function CustomBadgeCellComponent({ cell, onChange, onBlur, isEditing }: any) {
 }
 
 /* =========================================================================
+   Custom Cell Components Map
+   ใช้สำหรับ inject component เข้า cell ตาม field name
+   ========================================================================= */
+
+const CUSTOM_CELL_MAP: Record<
+  string,
+  { component: any; cellOverrides?: Record<string, any> }
+> = {
+  status: {
+    component: CustomStatusCellComponent,
+    cellOverrides: { className: "custom-status-cell", style: { padding: 0 } },
+  },
+  tags: {
+    component: CustomBadgeCellComponent,
+    cellOverrides: { className: "custom-tags-cell" },
+  },
+};
+
+/* =========================================================================
    PAGE COMPONENT
    ========================================================================= */
 
 export default function CustomSheetDemoPage() {
   const config = useMemo((): SheetConfig => {
-    return {
-      initialRows: buildPayrollRows(),
-      initialColumns: buildPayrollColumns(),
+    // สร้าง config จาก API data (จำลองว่ารับจาก API โดยไม่รู้ type ล่วงหน้า)
+    const baseConfig = createSheetConfigFromApi(API_COLUMNS, API_ROWS, {
       userName: "Admin",
       maxUndoHistory: 50,
       allowInsertRow: true,
@@ -520,6 +505,29 @@ export default function CustomSheetDemoPage() {
       allowDeleteRow: true,
       allowDeleteColumn: true,
       defaultCellStyle: "input-preview", // plain, input-preview
+      // กำหนดประเภทคอลัมน์ที่ใช้ในระบบ HR
+      columnTags: [
+        {
+          key: "income",
+          label: "รายได้",
+          icon: "fa-solid fa-circle-plus",
+          color: "#22c55e",
+          allowedFormats: ["number", "readonly"],
+        },
+        {
+          key: "deduction",
+          label: "รายหัก",
+          icon: "fa-solid fa-circle-minus",
+          color: "#ef4444",
+          allowedFormats: ["number", "readonly"],
+        },
+        {
+          key: "info",
+          label: "ข้อมูลทั่วไป",
+          icon: "fa-solid fa-circle-info",
+          color: "#3b82f6",
+        },
+      ],
       callbacks: {
         onSave: (payload: SavePayload) => {
           console.log(
@@ -531,7 +539,7 @@ export default function CustomSheetDemoPage() {
             `บันทึกสำเร็จ!\nSource: ${payload.source}\nChanged cells: ${payload.changedCells.length}\nAction logs: ${payload.actionLogs.length}`,
           );
         },
-        onAction: (action: ActionLog) => {
+        onAction: (_action: ActionLog) => {
           // Already logged by useActionLogger
         },
       },
@@ -541,7 +549,7 @@ export default function CustomSheetDemoPage() {
           label: "อนุมัติพนักงาน",
           icon: "fa-solid fa-circle-check",
           target: "cell",
-          onClick: (ctx) => {
+          onClick: (ctx: CustomMenuContext) => {
             console.log(
               "%c[Custom Action] อนุมัติพนักงาน",
               "color: #22c55e; font-weight: bold;",
@@ -564,11 +572,11 @@ export default function CustomSheetDemoPage() {
           label: "ส่งออกข้อมูลแถวนี้",
           icon: "fa-solid fa-file-export",
           target: "row-header",
-          onClick: (ctx) => {
+          onClick: (ctx: CustomMenuContext) => {
             const rowData = ctx.row
               ? Object.entries(ctx.row.cells).reduce(
                   (acc, [key, cell]) => {
-                    acc[key] = cell.value;
+                    acc[key] = (cell as SheetCell).value;
                     return acc;
                   },
                   {} as Record<string, any>,
@@ -594,7 +602,7 @@ export default function CustomSheetDemoPage() {
           label: "ดูสถิติแท็ก",
           icon: "fa-solid fa-chart-bar",
           target: "col-header",
-          onClick: (ctx) => {
+          onClick: (ctx: CustomMenuContext) => {
             console.log(
               "%c[Custom Action] ดูสถิติแท็ก",
               "color: #3b82f6; font-weight: bold;",
@@ -613,33 +621,34 @@ export default function CustomSheetDemoPage() {
           },
         },
       ],
-    };
+    });
+
+    // Inject custom cell components สำหรับ columns ที่เป็น 'custom' mode
+    // ในโปรเจคจริง ส่วนนี้คือจุดเชื่อมระหว่าง frontend กับ API
+    baseConfig.initialRows = baseConfig.initialRows.map((row) => {
+      const updatedCells = { ...row.cells };
+      for (const [fieldKey, mapping] of Object.entries(CUSTOM_CELL_MAP)) {
+        if (updatedCells[fieldKey]) {
+          updatedCells[fieldKey] = {
+            ...updatedCells[fieldKey],
+            component: mapping.component,
+            ...mapping.cellOverrides,
+          };
+        }
+      }
+      return { ...row, cells: updatedCells };
+    });
+
+    return baseConfig;
   }, []);
 
   return (
     <div className="space-y-5 animate-fade-in">
       <PageHeader
         title="Custom Sheet (HTML)"
-        subtitle="Version 1: Spreadsheet Component สร้างเองด้วย HTML/CSS/React ล้วนๆ - ไม่พึ่งพา Library ภายนอก"
+        subtitle="Version 2: ข้อมูลจาก API แบบ Dynamic - ไม่ต้องรู้ Type ล่วงหน้า"
         icon="fa-solid fa-code"
       />
-
-      {/* Feature Guide */}
-      {/* <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 text-sm text-blue-800">
-        <i className="fa-solid fa-circle-info mr-2"></i>
-        <strong>วิธีใช้งาน:</strong>
-        <ul className="mt-2 ml-4 space-y-1 list-disc text-xs">
-          <li>คลิกเพื่อเลือก Cell, Double-click เพื่อแก้ไข, Enter เพื่อยืนยัน</li>
-          <li>ลากเมาส์คลุมเพื่อเลือกหลาย Cell, คลิก # เพื่อเลือกทั้งแถว</li>
-          <li>คลิกขวาเพื่อเปิดเมนู (เพิ่ม/ลบ แถว/คอลัมน์, Comment)</li>
-          <li>ลาก Header เพื่อย้ายคอลัมน์, ลากขอบ Header เพื่อ Resize</li>
-          <li>ลากแถวเพื่อเปลี่ยนลำดับ, Delete/Backspace เพื่อล้างค่า</li>
-          <li>Ctrl/Cmd + Z/Y = Undo/Redo, Ctrl/Cmd + S = Save</li>
-          <li>Ctrl/Cmd + C/V/X = Copy / Paste / Cut</li>
-          <li>Double-click Header คอลัมน์เพื่อเปลี่ยนชื่อ หรือคลิกขวาเลือก เปลี่ยนชื่อคอลัมน์</li>
-          <li>Cell สีเทา = Disabled (ถูก Lock ไม่สามารถแก้ไขได้)</li>
-        </ul>
-      </div> */}
 
       {/* Custom Sheet Component */}
       <CustomSheet config={config} />

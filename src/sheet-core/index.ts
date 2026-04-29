@@ -30,6 +30,9 @@ export type {
   CustomMenuTarget,
   RowComponentProps,
   SearchState,
+  ColumnTagDefinition,
+  SortState,
+  SortDirection,
 } from './types';
 
 // Helpers
@@ -41,6 +44,7 @@ export {
   resetActionCounter,
   EMPTY_SELECTION,
   EMPTY_SEARCH,
+  EMPTY_SORT,
 } from './types';
 
 // Utils
@@ -70,6 +74,6 @@ export type { UseUndoRedoReturn } from './useUndoRedo';
 
 export { useKeyboard } from './useKeyboard';
 
-// Helpers
-export { createSheetConfigFromData } from './helpers';
-export type { SimpleColumnConfig, CreateFromDataOptions } from './helpers';
+// Data Helpers
+export { createSheetConfigFromData, createSheetConfigFromApi, autoDetectColumns } from './helpers';
+export type { SimpleColumnConfig, CreateFromDataOptions, ApiColumnDefinition } from './helpers';

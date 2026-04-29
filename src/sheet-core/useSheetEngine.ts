@@ -7,10 +7,10 @@ import { useState, useCallback, useRef, useMemo } from 'react';
 import type {
   SheetConfig, SheetRow, SheetColumn, SheetCell, Selection,
   CellPosition, CellComment, ActionLog, SavePayload,
-  ChangedCell, UndoableCommand, SearchState,
+  ChangedCell, UndoableCommand, SearchState, SortState, SortDirection,
 } from './types';
 import {
-  EMPTY_SELECTION, EMPTY_SEARCH, createCell, createRow,
+  EMPTY_SELECTION, EMPTY_SEARCH, EMPTY_SORT, createCell, createRow,
   createColumn, createActionLog,
 } from './types';
 import { useActionLogger } from './useActionLogger';
@@ -62,7 +62,7 @@ export interface UseSheetEngineReturn {
   moveColumn: (fromIndex: number, toIndex: number) => void;
   resizeColumn: (colId: string, width: number) => void;
   renameColumn: (colId: string, newTitle: string) => void;
-  updateColumnProps: (colId: string, props: Partial<Pick<SheetColumn, 'locked' | 'dataType' | 'options' | 'formula'>>) => void;
+  updateColumnProps: (colId: string, props: Partial<Pick<SheetColumn, 'locked' | 'dataType' | 'options' | 'formula' | 'columnTag'>>) => void;
 
   // Clipboard
   copySelection: () => void;
@@ -85,6 +85,11 @@ export interface UseSheetEngineReturn {
   redo: () => void;
   canUndo: boolean;
   canRedo: boolean;
+
+  // Sort (preview only - ไม่เปลี่ยนข้อมูลต้นฉบับ)
+  sort: SortState;
+  sortColumn: (colId: string) => void;
+  clearSort: () => void;
 
   // Save
   save: (source: SavePayload['source']) => void;
@@ -118,16 +123,52 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
   // Core state
   const [baseRows, setBaseRows] = useState<SheetRow[]>(() => deepClone(initialRows));
   const [columns, setColumns] = useState<SheetColumn[]>(() => deepClone(initialColumns));
-  
-  const rows = useMemo(() => computeRowFormulas(baseRows, columns), [baseRows, columns]);
-
-  const setRows = useCallback((action: React.SetStateAction<SheetRow[]>) => {
-    setBaseRows(action);
-  }, []);
   const [selection, setSelection] = useState<Selection>(EMPTY_SELECTION);
   const [editingCell, setEditingCell] = useState<CellPosition | null>(null);
   const [search, setSearch] = useState<SearchState>(EMPTY_SEARCH);
   const [changedCells, setChangedCells] = useState<ChangedCell[]>([]);
+  const [sort, setSort] = useState<SortState>(EMPTY_SORT);
+
+  // rows = baseRows -> formula computation -> sort (preview only)
+  const formulaRows = useMemo(() => computeRowFormulas(baseRows, columns), [baseRows, columns]);
+
+  const rows = useMemo(() => {
+    if (!sort.colId || !sort.direction) return formulaRows;
+
+    const col = columns.find(c => c.id === sort.colId);
+    if (!col) return formulaRows;
+
+    const sorted = [...formulaRows];
+    const dir = sort.direction === 'asc' ? 1 : -1;
+
+    sorted.sort((a, b) => {
+      const aVal = a.cells[sort.colId!]?.value;
+      const bVal = b.cells[sort.colId!]?.value;
+
+      // null/undefined/empty ลงท้ายสุดเสมอ
+      const aEmpty = aVal === undefined || aVal === null || aVal === '';
+      const bEmpty = bVal === undefined || bVal === null || bVal === '';
+      if (aEmpty && bEmpty) return 0;
+      if (aEmpty) return 1;
+      if (bEmpty) return -1;
+
+      // ตัวเลข sort ตามตัวเลข
+      const aNum = Number(aVal);
+      const bNum = Number(bVal);
+      if (!isNaN(aNum) && !isNaN(bNum)) {
+        return (aNum - bNum) * dir;
+      }
+
+      // text sort ตาม locale
+      return String(aVal).localeCompare(String(bVal), 'th') * dir;
+    });
+
+    return sorted;
+  }, [formulaRows, sort, columns]);
+
+  const setRows = useCallback((action: React.SetStateAction<SheetRow[]>) => {
+    setBaseRows(action);
+  }, []);
 
   // Refs สำหรับ closures
   const rowsRef = useRef(rows);
@@ -882,7 +923,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
   );
 
   const updateColumnProps = useCallback(
-    (colId: string, props: Partial<Pick<SheetColumn, 'locked' | 'dataType' | 'options' | 'formula'>>) => {
+    (colId: string, props: Partial<Pick<SheetColumn, 'locked' | 'dataType' | 'options' | 'formula' | 'columnTag'>>) => {
       const currentCols = columnsRef.current;
       const col = currentCols.find((c) => c.id === colId);
       if (!col) return;
@@ -892,6 +933,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
         dataType: col.dataType,
         options: col.options,
         formula: col.formula,
+        columnTag: col.columnTag,
       };
 
       const command: UndoableCommand = {
@@ -1262,6 +1304,48 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
   }, [undoRedo, emitAction]);
 
   // =============================================
+  // SORT (Preview Only - ไม่เปลี่ยน baseRows)
+  // =============================================
+
+  const sortColumn = useCallback(
+    (colId: string) => {
+      const col = columnsRef.current.find(c => c.id === colId);
+      if (!col || col.sortable === false) return;
+
+      setSort(prev => {
+        let newDirection: SortDirection;
+        if (prev.colId !== colId) {
+          // sort คอลัมน์ใหม่ -> เริ่มที่ asc
+          newDirection = 'asc';
+        } else if (prev.direction === 'asc') {
+          newDirection = 'desc';
+        } else {
+          // desc -> ยกเลิก sort
+          newDirection = null;
+        }
+
+        const newState: SortState = {
+          colId: newDirection ? colId : null,
+          direction: newDirection,
+        };
+
+        emitAction('sort-changed', { colId }, prev, newState);
+        return newState;
+      });
+    },
+    [emitAction]
+  );
+
+  const clearSort = useCallback(() => {
+    setSort(prev => {
+      if (prev.colId) {
+        emitAction('sort-changed', { cleared: true }, prev, EMPTY_SORT);
+      }
+      return EMPTY_SORT;
+    });
+  }, [emitAction]);
+
+  // =============================================
   // SAVE
   // =============================================
 
@@ -1341,6 +1425,10 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
     canRedo: undoRedo.canRedo,
 
     save,
+
+    sort,
+    sortColumn,
+    clearSort,
 
     actionLogs: logger.logs,
     clearLogs: logger.clearLogs,
