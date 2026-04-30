@@ -59,6 +59,7 @@ const API_COLUMNS: ApiColumnDefinition[] = [
     type: "number",
     width: 120,
     columnTag: "income",
+    lockDataType: true,
   },
   {
     field: "allowance",
@@ -66,6 +67,7 @@ const API_COLUMNS: ApiColumnDefinition[] = [
     type: "number",
     width: 100,
     columnTag: "income",
+    lockDataType: true,
   },
   {
     field: "overtime",

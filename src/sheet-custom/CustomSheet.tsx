@@ -604,6 +604,7 @@ export default function CustomSheet({
     if (type === "col-header" && cellPos) {
       const col = engine.columns.find((c) => c.id === cellPos.colId);
       const isLocked = col?.locked ?? false;
+      const isDataTypeLocked = col?.lockDataType ?? false;
       const currentType = col?.dataType || col?.defaultMode || "editable-text";
       const isCustomNode = currentType === "custom";
       const currentTag = col?.columnTag || "";
@@ -638,8 +639,10 @@ export default function CustomSheet({
         { key: "div-type", label: "", divider: true },
         {
           key: "type-label",
-          label: `รูปแบบข้อมูล: ${currentType}`,
-          icon: "fa-solid fa-database",
+          label: isDataTypeLocked
+            ? `รูปแบบข้อมูล: ${currentType} (ล็อค)`
+            : `รูปแบบข้อมูล: ${currentType}`,
+          icon: isDataTypeLocked ? "fa-solid fa-lock" : "fa-solid fa-database",
           disabled: true,
         },
         ...defaultFormats.map((f) => {
@@ -659,7 +662,7 @@ export default function CustomSheet({
                   !currentTag && currentType === f.mode
                     ? "fa-solid fa-check"
                     : "fa-regular fa-circle",
-                disabled: isCustomNode || engine.readonly,
+                disabled: isCustomNode || engine.readonly || isDataTypeLocked,
                 onClick: () => {
                   engine.updateColumnProps(cellPos.colId, {
                     dataType: f.mode,
@@ -675,7 +678,7 @@ export default function CustomSheet({
                   currentTag === tag.key && currentType === f.mode
                     ? "fa-solid fa-check"
                     : tag.icon || "fa-regular fa-circle",
-                disabled: isCustomNode || engine.readonly,
+                disabled: isCustomNode || engine.readonly || isDataTypeLocked,
                 onClick: () => {
                   engine.updateColumnProps(cellPos.colId, {
                     dataType: f.mode,
@@ -693,7 +696,7 @@ export default function CustomSheet({
               currentType === f.mode
                 ? "fa-solid fa-check"
                 : "fa-regular fa-circle",
-            disabled: isCustomNode || engine.readonly,
+            disabled: isCustomNode || engine.readonly || isDataTypeLocked,
             children,
             onClick: () => {
               // ถ้าคลิกตัวแม่ตรงๆ ให้เปลี่ยนแค่รูปแบบข้อมูล
@@ -708,7 +711,7 @@ export default function CustomSheet({
             currentType === "formula"
               ? "fa-solid fa-check"
               : "fa-regular fa-circle",
-          disabled: isCustomNode || engine.readonly,
+          disabled: isCustomNode || engine.readonly || isDataTypeLocked,
           onClick: () => openFormulaModal(cellPos.colId),
         },
       ];

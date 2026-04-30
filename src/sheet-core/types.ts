@@ -124,6 +124,7 @@ export interface SheetColumn {
   draggable: boolean;
   sortable?: boolean;
   locked?: boolean;            // บังคับล็อคห้ามแก้ไขทั้งคอลัมน์
+  lockDataType?: boolean;      // ล็อคประเภทข้อมูล (ห้ามเปลี่ยน dataType ผ่าน UI, กำหนดได้จาก code เท่านั้น)
   dataType?: CellMode;         // บังคับประเภทข้อมูลทั้งคอลัมน์ ('text', 'number', 'select', etc.)
   options?: SelectOption[];    // ช้อยส์ตั้งต้นกรณี dataType หรือ defaultMode เป็น 'select'
   defaultMode?: CellMode;
