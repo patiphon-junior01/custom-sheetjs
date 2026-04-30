@@ -259,6 +259,28 @@ export interface SavePayload {
   source: 'keyboard-shortcut' | 'button' | 'context-menu';
 }
 
+// ========== Change Payload ==========
+
+/** Payload ที่ส่งให้ onChange callback ทุกครั้งที่ข้อมูลเปลี่ยนแปลง */
+export interface SheetChangePayload {
+  /** ข้อมูลแถวทั้งหมด (รวมผลคำนวณสูตร) */
+  rows: SheetRow[];
+  /** ข้อมูลแถวดิบ (base data ก่อนคำนวณสูตร) */
+  baseRows: SheetRow[];
+  /** คอลัมน์ทั้งหมด */
+  columns: SheetColumn[];
+  /** เซลล์ที่ถูกแก้ไข */
+  changedCells: ChangedCell[];
+  /** มีการเปลี่ยนแปลงหรือยัง */
+  isDirty: boolean;
+  /** เวลาที่เกิดการเปลี่ยนแปลง */
+  timestamp: string;
+  /** Action ล่าสุดที่เกิดขึ้น (เช่น แก้เซลล์ไหน, เพิ่ม/ลบแถว, เปลี่ยน type อะไร) */
+  lastAction: ActionLog | null;
+  /** ประวัติ action ทั้งหมดที่เกิดขึ้น */
+  actionLogs: ActionLog[];
+}
+
 // ========== Callbacks ==========
 
 export interface SheetCallbacks {
@@ -283,6 +305,8 @@ export interface SheetCallbacks {
     newFormula: string;
     affectedColumns: string[];
   }) => void;
+  /** เรียกทุกครั้งที่ข้อมูลเปลี่ยนแปลง (ส่ง rows, columns, changedCells ทั้งหมด) */
+  onChange?: (payload: SheetChangePayload) => void;
 }
 
 // ========== Sheet Config ==========
@@ -316,6 +340,8 @@ export interface SheetConfig {
   columnTags?: ColumnTagDefinition[];
   /** โหมดอ่านอย่างเดียว (Read-only) ถ้า true จะห้ามแก้ไขข้อมูล, ห้ามเพิ่ม/ลบ แถวและคอลัมน์ (ทำได้แค่ Sort, ค้นหา, ย่อขยาย) */
   readonly?: boolean;
+  /** เปิดแสดง message ของ antd เมื่อทำรายการสำเร็จ/error (default: true) */
+  enableMessages?: boolean;
 }
 
 // ========== Undo/Redo Command ==========

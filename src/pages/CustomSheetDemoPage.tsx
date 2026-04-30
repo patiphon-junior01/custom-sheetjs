@@ -12,6 +12,7 @@ import type {
   ApiColumnDefinition,
   CustomMenuContext,
   SheetCell,
+  SheetChangePayload,
 } from "../sheet-core";
 import { createSheetConfigFromApi } from "../sheet-core";
 import CustomSheet from "../sheet-custom/CustomSheet";
@@ -565,8 +566,93 @@ export default function CustomSheetDemoPage() {
             "color: #22c55e; font-weight: bold;",
             payload,
           );
-          alert(
-            `บันทึกสำเร็จ!\nSource: ${payload.source}\nChanged cells: ${payload.changedCells.length}\nAction logs: ${payload.actionLogs.length}`,
+        },
+        onChange: (payload: SheetChangePayload) => {
+          // === Header Columns (รายละเอียดครบ) ===
+          const columnsDetail = payload.columns.map((col, idx) => ({
+            index: idx + 1,
+            id: col.id,
+            title: col.title,
+            dataType: col.dataType || col.defaultMode || "editable-text",
+            width: col.width,
+            locked: col.locked || false,
+            lockDataType: col.lockDataType || false,
+            columnTag: col.columnTag || null,
+            formula: col.formula || null,
+            formulaTemplate: col.formulaTemplate || null,
+            sortable: col.sortable !== false,
+            draggable: col.draggable !== false,
+            showNegativeRed: col.showNegativeRed,
+            forceNegativeDisplay: col.forceNegativeDisplay || false,
+          }));
+
+          // === Rows Data (ข้อมูลทุกแถว + ทุกเซลล์) ===
+          const rowsDetail = payload.rows.map((row, idx) => {
+            const cellsData: Record<string, any> = {};
+            for (const [colId, cell] of Object.entries(row.cells)) {
+              cellsData[colId] = cell.value;
+            }
+            return {
+              index: idx + 1,
+              rowId: row.id,
+              data: cellsData,
+            };
+          });
+
+          // === Changed Cells ===
+          const changedDetail = payload.changedCells.map((ch) => ({
+            rowId: ch.rowId,
+            colId: ch.colId,
+            before: ch.before,
+            after: ch.after,
+          }));
+
+          console.log(
+            "%c[Custom Sheet] Data Changed",
+            "color: #3b82f6; font-weight: bold;",
+          );
+          console.table(columnsDetail);
+          console.log(
+            "%c  Rows (" + rowsDetail.length + " rows)",
+            "color: #8b5cf6; font-weight: bold;",
+          );
+          console.table(rowsDetail);
+          if (changedDetail.length > 0) {
+            console.log(
+              "%c  Changed Cells (" + changedDetail.length + " cells)",
+              "color: #f59e0b; font-weight: bold;",
+            );
+            console.table(changedDetail);
+          }
+
+          // === Last Action (ทำอะไรไปล่าสุด ณ จุดไหน) ===
+          if (payload.lastAction) {
+            const act = payload.lastAction;
+            console.log(
+              "%c  Last Action: " + act.type,
+              "color: #ec4899; font-weight: bold;",
+              {
+                actionType: act.type,
+                timestamp: act.timestamp,
+                user: act.user || "N/A",
+                payload: act.payload,
+                before: act.before,
+                after: act.after,
+              },
+            );
+          }
+
+          console.log(
+            "%c  Summary",
+            "color: #6b7280; font-weight: bold;",
+            {
+              isDirty: payload.isDirty,
+              timestamp: payload.timestamp,
+              totalColumns: payload.columns.length,
+              totalRows: payload.rows.length,
+              totalChangedCells: payload.changedCells.length,
+              totalActionLogs: payload.actionLogs.length,
+            },
           );
         },
         onAction: (_action: ActionLog) => {

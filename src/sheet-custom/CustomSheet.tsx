@@ -30,7 +30,7 @@ import { CustomSheetCell } from "./CustomSheetCell";
 import { CustomContextMenu } from "./CustomContextMenu";
 import { CustomCommentPopover } from "./CustomCommentPopover";
 import { QuestionCircleOutlined } from "@ant-design/icons";
-import { Tooltip, Modal, Input, Typography, Tag, Space } from "antd";
+import { Tooltip, Modal, Input, Typography, Tag, Space, message } from "antd";
 import "./custom-sheet.css";
 
 const { Text } = Typography;
@@ -201,9 +201,58 @@ export default function CustomSheet({
 }: CustomSheetProps) {
   const engine = useSheetEngine(config);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [messageApi, contextHolder] = message.useMessage();
+  const enableMessages = config.enableMessages !== false; // default: true
 
   // Keyboard shortcuts
   useKeyboard({ containerRef, engine, enabled: true });
+
+  // =============================================
+  // antd message: แสดงแจ้งเตือนเมื่อทำรายการสำเร็จ/error
+  // =============================================
+  const prevActionCountRef = useRef(engine.actionLogs.length);
+  useEffect(() => {
+    if (!enableMessages) return;
+    const logs = engine.actionLogs;
+    const prevCount = prevActionCountRef.current;
+    prevActionCountRef.current = logs.length;
+
+    // ข้ามรอบแรก + ไม่มี log ใหม่
+    if (prevCount === 0 || logs.length <= prevCount) return;
+
+    // เอาเฉพาะ action ล่าสุด
+    const lastLog = logs[logs.length - 1];
+    if (!lastLog) return;
+
+    // Action ที่ไม่ต้องแจ้งเตือน
+    const silentActions = ['selection-changed', 'sort-changed', 'column-resized', 'cell-edited'];
+    if (silentActions.includes(lastLog.type)) return;
+
+    // แสดง message ตามประเภท action (ครบทุก ActionType ยกเว้น silent)
+    const messageMap: Record<string, { text: string; type: 'success' | 'info' | 'warning' }> = {
+      'save': { text: 'บันทึกข้อมูลสำเร็จ', type: 'success' },
+      'row-inserted': { text: 'เพิ่มแถวสำเร็จ', type: 'success' },
+      'row-deleted': { text: 'ลบแถวสำเร็จ', type: 'success' },
+      'row-moved': { text: 'ย้ายแถวสำเร็จ', type: 'info' },
+      'column-inserted': { text: 'เพิ่มคอลัมน์สำเร็จ', type: 'success' },
+      'column-deleted': { text: 'ลบคอลัมน์สำเร็จ', type: 'success' },
+      'column-renamed': { text: 'เปลี่ยนชื่อคอลัมน์สำเร็จ', type: 'success' },
+      'column-moved': { text: 'ย้ายคอลัมน์สำเร็จ', type: 'info' },
+      'column-props-updated': { text: 'อัปเดตคอลัมน์สำเร็จ', type: 'info' },
+      'bulk-edit': { text: 'แก้ไขข้อมูลหลายเซลล์สำเร็จ', type: 'success' },
+      'cell-cleared': { text: 'ล้างข้อมูลสำเร็จ', type: 'info' },
+      'undo': { text: 'ย้อนกลับสำเร็จ', type: 'info' },
+      'redo': { text: 'ทำซ้ำสำเร็จ', type: 'info' },
+      'comment-added': { text: 'เพิ่มคอมเมนต์สำเร็จ', type: 'success' },
+      'comment-updated': { text: 'แก้ไขคอมเมนต์สำเร็จ', type: 'success' },
+      'comment-deleted': { text: 'ลบคอมเมนต์สำเร็จ', type: 'success' },
+    };
+
+    const mapped = messageMap[lastLog.type];
+    if (mapped) {
+      messageApi[mapped.type](mapped.text);
+    }
+  }, [engine.actionLogs, enableMessages, messageApi]);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -1022,6 +1071,8 @@ export default function CustomSheet({
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
     >
+      {/* antd message context */}
+      {contextHolder}
       {/* Toolbar */}
       <div className="cs-toolbar">
         <button

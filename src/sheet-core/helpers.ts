@@ -85,6 +85,8 @@ export interface CreateFromDataOptions {
   readonly?: boolean;
   /** ID ของ sheet (ใช้เป็น key สำหรับเก็บ layout ลง localStorage) */
   sheetId?: string;
+  /** เปิดแสดง message ของ antd เมื่อทำรายการสำเร็จ/error (default: true) */
+  enableMessages?: boolean;
   /** รองรับ properties อื่นๆ ที่ consumer ต้องการ */
   [key: string]: any;
 }
@@ -228,6 +230,7 @@ export function createSheetConfigFromData(
     columnTags: options.columnTags,
     readonly: options.readonly,
     sheetId: options.sheetId,
+    enableMessages: options.enableMessages,
   };
 }
 
@@ -330,6 +333,7 @@ export function createSheetConfigFromApi(
     columnTags: options.columnTags,
     readonly: options.readonly,
     sheetId: options.sheetId,
+    enableMessages: options.enableMessages,
   };
 }
 

@@ -34,6 +34,7 @@ export type {
   FormulaTemplate,
   SortState,
   SortDirection,
+  SheetChangePayload,
 } from './types';
 
 // Helpers

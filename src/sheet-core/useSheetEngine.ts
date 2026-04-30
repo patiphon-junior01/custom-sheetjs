@@ -1516,6 +1516,31 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
 
   const isDirty = useMemo(() => changedCells.length > 0, [changedCells]);
 
+  // =============================================
+  // onChange callback - เรียกทุกครั้งที่ข้อมูลเปลี่ยนแปลง
+  // =============================================
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    // ข้ามรอบแรก (initial render) ไม่ต้องเรียก onChange
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    const logs = logger.logs;
+    const lastAction = logs.length > 0 ? logs[logs.length - 1] : null;
+
+    callbacksRef.current?.onChange?.({
+      rows: deepClone(rows),
+      baseRows: deepClone(baseRows),
+      columns: deepClone(columns),
+      changedCells: [...changedCells],
+      isDirty,
+      timestamp: new Date().toISOString(),
+      lastAction: lastAction ? { ...lastAction } : null,
+      actionLogs: [...logs],
+    });
+  }, [baseRows, columns, changedCells, rows, isDirty, logger.logs]);
+
   return {
     rows,
     columns,
