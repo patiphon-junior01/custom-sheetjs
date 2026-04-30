@@ -263,12 +263,12 @@ export interface SavePayload {
 
 /** Payload ที่ส่งให้ onChange callback ทุกครั้งที่ข้อมูลเปลี่ยนแปลง */
 export interface SheetChangePayload {
-  /** ข้อมูลแถวทั้งหมด (รวมผลคำนวณสูตร) */
-  rows: SheetRow[];
-  /** ข้อมูลแถวดิบ (base data ก่อนคำนวณสูตร) */
-  baseRows: SheetRow[];
-  /** คอลัมน์ทั้งหมด */
-  columns: SheetColumn[];
+  /** ฟังก์ชันสำหรับดึงข้อมูลแถวทั้งหมด (รวมผลคำนวณสูตร) แบบ Deep Clone */
+  getRows: () => SheetRow[];
+  /** ฟังก์ชันสำหรับดึงข้อมูลแถวดิบ (base data) แบบ Deep Clone */
+  getBaseRows: () => SheetRow[];
+  /** ฟังก์ชันสำหรับดึงคอลัมน์ทั้งหมด แบบ Deep Clone */
+  getColumns: () => SheetColumn[];
   /** เซลล์ที่ถูกแก้ไข */
   changedCells: ChangedCell[];
   /** มีการเปลี่ยนแปลงหรือยัง */

@@ -569,7 +569,8 @@ export default function CustomSheetDemoPage() {
         },
         onChange: (payload: SheetChangePayload) => {
           // === Header Columns (รายละเอียดครบ) ===
-          const columnsDetail = payload.columns.map((col, idx) => ({
+          const columns = payload.getColumns();
+          const columnsDetail = columns.map((col, idx) => ({
             index: idx + 1,
             id: col.id,
             title: col.title,
@@ -587,7 +588,8 @@ export default function CustomSheetDemoPage() {
           }));
 
           // === Rows Data (ข้อมูลทุกแถว + ทุกเซลล์) ===
-          const rowsDetail = payload.rows.map((row, idx) => {
+          const rows = payload.getRows();
+          const rowsDetail = rows.map((row, idx) => {
             const cellsData: Record<string, any> = {};
             for (const [colId, cell] of Object.entries(row.cells)) {
               cellsData[colId] = cell.value;
@@ -648,8 +650,8 @@ export default function CustomSheetDemoPage() {
             {
               isDirty: payload.isDirty,
               timestamp: payload.timestamp,
-              totalColumns: payload.columns.length,
-              totalRows: payload.rows.length,
+              totalColumns: columns.length,
+              totalRows: rows.length,
               totalChangedCells: payload.changedCells.length,
               totalActionLogs: payload.actionLogs.length,
             },

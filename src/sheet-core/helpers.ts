@@ -53,6 +53,8 @@ export interface ApiColumnDefinition {
   type?: string;
   dataType?: string;
   mode?: string;
+  /** ล็อคประเภทข้อมูล - ห้ามแก้ไขประเภทข้อมูลผ่าน UI */
+  lockDataType?: boolean;
   /** รองรับ properties อื่นๆ ทุกอย่างที่ API ส่งมา */
   [key: string]: any;
 }

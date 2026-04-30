@@ -33,22 +33,85 @@ export function isCellInSelection(
  * คำนวณสูตรอิงตามคอลัมน์ใหม่อัตโนมัติ หากคอลัมน์ใดกำหนดโหมดเป็น formula
  */
 export function computeRowFormulas(rows: SheetRow[], columns: SheetColumn[]): SheetRow[] {
-  const formulaCols = columns.filter(c => (c.dataType === 'formula' || c.defaultMode === 'formula') && c.formula);
+  // กรองเฉพาะคอลัมน์สูตร + early exit ถ้าไม่มี
+  const formulaCols = columns.filter(c =>
+    (c.dataType === 'formula' || c.defaultMode === 'formula') && c.formula
+  );
   if (formulaCols.length === 0) return rows;
+
+  // Pre-compile regex ครั้งเดียวนอก loop
+  const colRegex = /\[([^\]]+)\]/g;
+
+  // 1. สร้าง Dependency Graph และหา Topological Order
+  const graph = new Map<string, string[]>(); // colId -> [อ้างอิงไปหาใครบ้าง (edges)]
+  const inDegree = new Map<string, number>();
+  formulaCols.forEach(c => {
+    graph.set(c.id, []);
+    inDegree.set(c.id, 0);
+  });
+
+  formulaCols.forEach(c => {
+    if (!c.formula) return;
+    const deps = new Set<string>();
+    let match;
+    colRegex.lastIndex = 0;
+    while ((match = colRegex.exec(c.formula)) !== null) {
+      const depId = match[1];
+      // เฉพาะ dependencies ที่เป็น formula คอลัมน์เหมือนกัน
+      if (formulaCols.some(fc => fc.id === depId)) {
+        deps.add(depId);
+      }
+    }
+    deps.forEach(depId => {
+      graph.get(depId)?.push(c.id);
+      if (inDegree.has(c.id)) {
+        inDegree.set(c.id, inDegree.get(c.id)! + 1);
+      }
+    });
+  });
+
+  // 2. Kahn's Algorithm
+  const sortedFormulaCols: SheetColumn[] = [];
+  const cycleCols = new Set<string>();
+  const queue: string[] = [];
+  
+  inDegree.forEach((degree, colId) => {
+    if (degree === 0) queue.push(colId);
+  });
+
+  while (queue.length > 0) {
+    const currentId = queue.shift()!;
+    const col = formulaCols.find(c => c.id === currentId);
+    if (col) sortedFormulaCols.push(col);
+
+    graph.get(currentId)?.forEach(neighbor => {
+      const currentDegree = inDegree.get(neighbor)! - 1;
+      inDegree.set(neighbor, currentDegree);
+      if (currentDegree === 0) {
+        queue.push(neighbor);
+      }
+    });
+  }
+
+  // 3. คอลัมน์ที่ In-degree ไม่เป็น 0 คือพวกที่ติด Cycle (หรือดึงค่าจาก Cycle)
+  inDegree.forEach((degree, colId) => {
+    if (degree > 0) cycleCols.add(colId);
+  });
 
   return rows.map(row => {
     let newRow: SheetRow | null = null;
+    
+    // สำเนาค่า cells ล่าสุดไว้ใช้ระหว่างการคำนวณ (เพื่อให้อ้างอิงผลลัพธ์ของคอลัมน์สูตรที่คำนวณก่อนหน้าได้ถูกต้อง)
+    const currentCells = { ...row.cells };
 
-    for (const col of formulaCols) {
+    // คำนวณตามลำดับ Topological Order
+    for (const col of sortedFormulaCols) {
       if (!col.formula) continue;
-      
-      let parsedFormula = col.formula;
-      // แปลง pattern [colId] ให้ดึงมาจากช่องที่อ้างอิงในบรรทัดเดียวกัน
-      const colRegex = /\[([^\]]+)\]/g;
-      
-      parsedFormula = parsedFormula.replace(colRegex, (match, colId) => {
-        const val = row.cells[colId]?.value;
-        if (val === undefined || val === null || val === '') return '0'; // Default numeric fallback for empty cells
+
+      colRegex.lastIndex = 0;
+      const parsedFormula = col.formula.replace(colRegex, (_match, colId) => {
+        const val = currentCells[colId]?.value;
+        if (val === undefined || val === null || val === '') return '0';
         return JSON.stringify(val);
       });
 
@@ -57,21 +120,35 @@ export function computeRowFormulas(rows: SheetRow[], columns: SheetColumn[]): Sh
         // eslint-disable-next-line no-new-func
         resultVal = new Function(`return ${parsedFormula}`)();
         if (typeof resultVal === 'number') {
-           if (!isFinite(resultVal)) resultVal = '#DIV/0!';
-           else resultVal = Number(resultVal.toFixed(2)).toString(); // ป้องกันทศนิยมลอยทิ้งขยะ และแปลงเป็น string
+          if (!isFinite(resultVal)) {
+            resultVal = '#DIV/0!';
+          } else {
+            resultVal = parseFloat(resultVal.toFixed(10));
+          }
         } else if (resultVal !== null && resultVal !== undefined) {
-           resultVal = resultVal.toString();
+          resultVal = String(resultVal);
         }
-      } catch (e) {
+      } catch {
         resultVal = '#ERROR';
       }
 
+      currentCells[col.id] = { ...currentCells[col.id], value: resultVal };
       if (row.cells[col.id]?.value !== resultVal) {
         if (!newRow) newRow = { ...row, cells: { ...row.cells } };
-        newRow.cells[col.id] = { ...newRow.cells[col.id], value: resultVal };
+        newRow.cells[col.id] = currentCells[col.id];
       }
     }
-    return newRow || row;
+
+    // กำหนดค่า #CYCLE! ให้กับคอลัมน์ที่อ้างอิงกันเป็นวงกลม
+    for (const colId of cycleCols) {
+      const resultVal = '#CYCLE!';
+      if (row.cells[colId]?.value !== resultVal) {
+        if (!newRow) newRow = { ...row, cells: { ...row.cells } };
+        newRow.cells[colId] = { ...row.cells[colId], value: resultVal };
+      }
+    }
+
+    return newRow ?? row;
   });
 }
 

@@ -73,7 +73,8 @@ sheet-custom/  (UI Layer - React Components)
 - ใช้ `baseRows` (raw data) + `useMemo` => `rows` (computed with formulas)
 - Undo/Redo ใช้ **ref-based synchronous stack** (ไม่ใช่ state)
 - Refs ใช้สำหรับ closures ที่ต้องเข้าถึง state ล่าสุดเสมอ
-- `setRows` จริงๆ คือ `setBaseRows` (ข้อมูลดิบ) -> `useMemo` จะคำนวณ formula ให้อัตโนมัติ
+- `setBaseRows` ใช้สำหรับเปลี่ยนข้อมูลดิบ -> `useMemo` จะคำนวณ formula และคืนค่า `rows` ให้อัตโนมัติ (ห้ามใช้ชื่อซ้อนกันเพื่อลดความสับสน)
+- `SheetChangePayload` (ที่ส่งผ่าน onChange) ใช้หลักการ **Lazy Cloning (Getters)** (`getRows()`, `getColumns()`) เพื่อลดปัญหา Memory Overflow จากการ Deep Clone บ่อยๆ
 
 ### 5. CSS
 
@@ -86,8 +87,9 @@ sheet-custom/  (UI Layer - React Components)
 
 - Parser ใช้ `new Function()` ด้วย `JSON.stringify` สำหรับ variable injection
 - รองรับทั้ง **Math** และ **String concatenation**
+- **Topological Sort & Cycle Detection:** ระบบจะจัดเรียงลำดับการคำนวณสูตรตาม Dependency อัตโนมัติ และถ้าพบการอ้างอิงวนลูปจะคืนค่า `#CYCLE!` ทันที
 - ค่าว่าง/null ใน formula จะ fallback เป็น `0`
-- ผลลัพธ์ `#ERROR` หรือ `#DIV/0!` สำหรับข้อผิดพลาด
+- ผลลัพธ์ `#ERROR`, `#DIV/0!`, หรือ `#CYCLE!` สำหรับข้อผิดพลาด
 - เซลล์ formula เป็น readonly อัตโนมัติ
 - เซลล์ formula แสดงเป็น plain text (ไม่มี input-preview)
 
@@ -257,12 +259,10 @@ helpers.ts
 
 ## Known Limitations
 
-1. **Performance**: `computeRowFormulas` recalculates all rows on any change.
-   - สำหรับ dataset ขนาดใหญ่ (>1000 rows) ควรพิจารณา dependency graph
+1. **Performance**: แม้ `computeRowFormulas` จะถูกปรับปรุงด้วย Topological Sort และ Lazy Cloning แล้ว แต่ยังอาจพบความหน่วงเล็กน้อยที่จำนวนข้อมูล 5,000+ แถว
 2. **Formula Security**: ใช้ `new Function()` ซึ่งต้องระวังเรื่อง injection
    - ปัจจุบันใช้ `JSON.stringify` ป้องกัน แต่ไม่ใช่ sandbox เต็มรูปแบบ
 3. **Virtual Scrolling**: ยังไม่ได้ implement (มี `virtualThreshold` prop ไว้แต่ยังไม่ทำงาน)
-4. **Circular Formula**: ไม่มี circular dependency detection (formula A อ้าง B อ้าง A จะ loop)
 
 ---
 

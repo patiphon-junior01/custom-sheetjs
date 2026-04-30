@@ -29,6 +29,7 @@ import {
 export interface UseSheetEngineReturn {
   // Data
   rows: SheetRow[];
+  baseRows: SheetRow[];
   columns: SheetColumn[];
   selection: Selection;
   search: SearchState;
@@ -63,7 +64,8 @@ export interface UseSheetEngineReturn {
   moveColumn: (fromIndex: number, toIndex: number) => void;
   resizeColumn: (colId: string, width: number) => void;
   renameColumn: (colId: string, newTitle: string) => void;
-  updateColumnProps: (colId: string, props: Partial<Pick<SheetColumn, 'locked' | 'dataType' | 'options' | 'formula' | 'columnTag' | 'formulaTemplate' | 'showNegativeRed' | 'forceNegativeDisplay'>>) => void;
+  /** อัปเดต properties ของคอลัมน์ - ส่งได้เฉพาะ field ที่ต้องการเปลี่ยน */
+  updateColumnProps: (colId: string, props: Partial<SheetColumn>) => void;
 
   // Clipboard
   copySelection: () => void;
@@ -185,9 +187,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
     return sorted;
   }, [formulaRows, sort, columns]);
 
-  const setRows = useCallback((action: React.SetStateAction<SheetRow[]>) => {
-    setBaseRows(action);
-  }, []);
+  // หมายเหตุ: ไม่มี setRows wrapper แล้ว - ใช้ setBaseRows ตรงๆ เพื่อป้องกัน unnecessary closure layer
 
   // Refs สำหรับ closures
   const rowsRef = useRef(rows);
@@ -269,7 +269,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
             type: 'bulk-edit',
             description: `Bulk set ${oldValues.length} cells to "${value}"`,
             execute: () => {
-              setRows((prev) => {
+              setBaseRows((prev) => {
                 const next = [...prev];
                 oldValues.forEach(({ rowId, colId, newValue }) => {
                   const idx = next.findIndex((r) => r.id === rowId);
@@ -286,7 +286,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
               });
             },
             undo: () => {
-              setRows((prev) => {
+              setBaseRows((prev) => {
                 const next = [...prev];
                 oldValues.forEach(({ rowId, colId, value: oldVal }) => {
                   const idx = next.findIndex((r) => r.id === rowId);
@@ -347,7 +347,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
         type: 'cell-edited',
         description: `Edit cell [${rowId}:${colId}]`,
         execute: () => {
-          setRows((prev) => {
+          setBaseRows((prev) => {
             return prev.map((r) =>
               r.id === rowId
                 ? { ...r, cells: { ...r.cells, [colId]: { ...r.cells[colId], value: parsedValue } } }
@@ -356,7 +356,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
           });
         },
         undo: () => {
-          setRows((prev) => {
+          setBaseRows((prev) => {
             return prev.map((r) =>
               r.id === rowId
                 ? { ...r, cells: { ...r.cells, [colId]: { ...r.cells[colId], value: oldValue } } }
@@ -400,7 +400,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
       type: 'cell-cleared',
       description: `Clear ${oldValues.length} cells`,
       execute: () => {
-        setRows((prev) => {
+        setBaseRows((prev) => {
           const next = [...prev];
           oldValues.forEach(({ rowId, colId }) => {
             const idx = next.findIndex((r) => r.id === rowId);
@@ -417,7 +417,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
         });
       },
       undo: () => {
-        setRows((prev) => {
+        setBaseRows((prev) => {
           const next = [...prev];
           oldValues.forEach(({ rowId, colId, value }) => {
             const idx = next.findIndex((r) => r.id === rowId);
@@ -464,7 +464,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
         type: 'bulk-edit',
         description: `Bulk set ${oldValues.length} cells to "${value}"`,
         execute: () => {
-          setRows((prev) => {
+          setBaseRows((prev) => {
             const next = [...prev];
             oldValues.forEach(({ rowId, colId }) => {
               const idx = next.findIndex((r) => r.id === rowId);
@@ -481,7 +481,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
           });
         },
         undo: () => {
-          setRows((prev) => {
+          setBaseRows((prev) => {
             const next = [...prev];
             oldValues.forEach(({ rowId, colId, value: oldVal }) => {
               const idx = next.findIndex((r) => r.id === rowId);
@@ -656,10 +656,10 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
         type: 'row-inserted',
         description: `Insert row ${position} ${referenceId || 'end'}`,
         execute: () => {
-          setRows((prev) => insertArrayItem(prev, insertIdx, newRow));
+          setBaseRows((prev) => insertArrayItem(prev, insertIdx, newRow));
         },
         undo: () => {
-          setRows((prev) => prev.filter((r) => r.id !== newRow.id));
+          setBaseRows((prev) => prev.filter((r) => r.id !== newRow.id));
         },
       };
 
@@ -691,10 +691,10 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
         description: `Delete ${deletedRows.length} rows`,
         execute: () => {
           const deleteIds = new Set(deletedRows.map((d) => d.row.id));
-          setRows((prev) => prev.filter((r) => !deleteIds.has(r.id)));
+          setBaseRows((prev) => prev.filter((r) => !deleteIds.has(r.id)));
         },
         undo: () => {
-          setRows((prev) => {
+          setBaseRows((prev) => {
             const next = [...prev];
             // Insert กลับที่เดิม (จากท้ายมาหน้า)
             const sorted = [...deletedRows].sort((a, b) => a.index - b.index);
@@ -725,8 +725,8 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
         id: generateId('cmd'),
         type: 'row-moved',
         description: `Move row from ${fromIndex} to ${toIndex}`,
-        execute: () => setRows((prev) => moveArrayItem(prev, fromIndex, toIndex)),
-        undo: () => setRows((prev) => moveArrayItem(prev, toIndex, fromIndex)),
+        execute: () => setBaseRows((prev) => moveArrayItem(prev, fromIndex, toIndex)),
+        undo: () => setBaseRows((prev) => moveArrayItem(prev, toIndex, fromIndex)),
       };
 
       undoRedo.execute(command);
@@ -762,7 +762,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
         description: `Insert column ${position} ${referenceId || 'end'}`,
         execute: () => {
           setColumns((prev) => insertArrayItem(prev, insertIdx, newCol));
-          setRows((prev) =>
+          setBaseRows((prev) =>
             prev.map((row) => ({
               ...row,
               cells: {
@@ -774,7 +774,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
         },
         undo: () => {
           setColumns((prev) => prev.filter((c) => c.id !== colId));
-          setRows((prev) =>
+          setBaseRows((prev) =>
             prev.map((row) => {
               const { [colId]: _, ...rest } = row.cells;
               return { ...row, cells: rest };
@@ -838,7 +838,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
         execute: () => {
           const deleteIds = new Set(ids);
           setColumns((prev) => prev.filter((c) => !deleteIds.has(c.id)));
-          setRows((prev) =>
+          setBaseRows((prev) =>
             prev.map((row) => {
               const newCells = { ...row.cells };
               ids.forEach((id) => delete newCells[id]);
@@ -855,7 +855,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
             });
             return next;
           });
-          setRows((prev) =>
+          setBaseRows((prev) =>
             prev.map((row) => {
               const saved = savedCellData.find((s) => s.rowId === row.id);
               return {
@@ -985,7 +985,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
   );
 
   const updateColumnProps = useCallback(
-    (colId: string, props: Partial<Pick<SheetColumn, 'locked' | 'dataType' | 'options' | 'formula' | 'columnTag' | 'formulaTemplate' | 'showNegativeRed' | 'forceNegativeDisplay'>>) => {
+    (colId: string, props: Partial<SheetColumn>) => {
       const currentCols = columnsRef.current;
       const col = currentCols.find((c) => c.id === colId);
       if (!col) return;
@@ -1114,7 +1114,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
         type: 'comment-added',
         description: `Add comment on [${rowId}:${colId}]`,
         execute: () => {
-          setRows((prev) =>
+          setBaseRows((prev) =>
             prev.map((r) =>
               r.id === rowId
                 ? { ...r, cells: { ...r.cells, [colId]: { ...r.cells[colId], comment } } }
@@ -1123,7 +1123,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
           );
         },
         undo: () => {
-          setRows((prev) =>
+          setBaseRows((prev) =>
             prev.map((r) =>
               r.id === rowId
                 ? { ...r, cells: { ...r.cells, [colId]: { ...r.cells[colId], comment: undefined } } }
@@ -1154,7 +1154,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
         type: 'comment-updated',
         description: `Update comment on [${rowId}:${colId}]`,
         execute: () => {
-          setRows((prev) =>
+          setBaseRows((prev) =>
             prev.map((r) =>
               r.id === rowId
                 ? { ...r, cells: { ...r.cells, [colId]: { ...r.cells[colId], comment: newComment } } }
@@ -1163,7 +1163,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
           );
         },
         undo: () => {
-          setRows((prev) =>
+          setBaseRows((prev) =>
             prev.map((r) =>
               r.id === rowId
                 ? { ...r, cells: { ...r.cells, [colId]: { ...r.cells[colId], comment: oldComment } } }
@@ -1193,7 +1193,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
         type: 'comment-deleted',
         description: `Delete comment on [${rowId}:${colId}]`,
         execute: () => {
-          setRows((prev) =>
+          setBaseRows((prev) =>
             prev.map((r) =>
               r.id === rowId
                 ? { ...r, cells: { ...r.cells, [colId]: { ...r.cells[colId], comment: undefined } } }
@@ -1202,7 +1202,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
           );
         },
         undo: () => {
-          setRows((prev) =>
+          setBaseRows((prev) =>
             prev.map((r) =>
               r.id === rowId
                 ? { ...r, cells: { ...r.cells, [colId]: { ...r.cells[colId], comment: oldComment } } }
@@ -1329,7 +1329,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
       type: 'bulk-edit',
       description: `Paste ${changes.length} cells`,
       execute: () => {
-        setRows((prev) => {
+        setBaseRows((prev) => {
           const next = [...prev];
           changes.forEach(({ rowId, colId, newValue }) => {
             const idx = next.findIndex((rr) => rr.id === rowId);
@@ -1346,7 +1346,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
         });
       },
       undo: () => {
-        setRows((prev) => {
+        setBaseRows((prev) => {
           const next = [...prev];
           changes.forEach(({ rowId, colId, oldValue }) => {
             const idx = next.findIndex((rr) => rr.id === rowId);
@@ -1519,30 +1519,31 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
   // =============================================
   // onChange callback - เรียกทุกครั้งที่ข้อมูลเปลี่ยนแปลง
   // =============================================
-  const isFirstRender = useRef(true);
+  // ใช้ lastLogId แทน count เพื่อไม่ถูก undo ทำให้เดา trigger ซ้ำ
+  const lastEmittedLogIdRef = useRef<string | null>(null);
   useEffect(() => {
-    // ข้ามรอบแรก (initial render) ไม่ต้องเรียก onChange
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
     const logs = logger.logs;
-    const lastAction = logs.length > 0 ? logs[logs.length - 1] : null;
+    const lastLog = logs.length > 0 ? logs[logs.length - 1] : null;
+
+    // ข้ามถ้า log เดิมหรือเป็น log เดิมที่เคย emit ไปแล้ว
+    if (!lastLog || lastLog.id === lastEmittedLogIdRef.current) return;
+    lastEmittedLogIdRef.current = lastLog.id;
 
     callbacksRef.current?.onChange?.({
-      rows: deepClone(rows),
-      baseRows: deepClone(baseRows),
-      columns: deepClone(columns),
+      getRows: () => deepClone(rows),
+      getBaseRows: () => deepClone(baseRows),
+      getColumns: () => deepClone(columns),
       changedCells: [...changedCells],
       isDirty,
       timestamp: new Date().toISOString(),
-      lastAction: lastAction ? { ...lastAction } : null,
+      lastAction: { ...lastLog },
       actionLogs: [...logs],
     });
-  }, [baseRows, columns, changedCells, rows, isDirty, logger.logs]);
+  }, [rows, baseRows, columns, changedCells, isDirty, logger.logs]);
 
   return {
     rows,
+    baseRows,
     columns,
     selection,
     search,
