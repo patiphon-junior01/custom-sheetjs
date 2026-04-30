@@ -204,6 +204,19 @@ sheet-custom/  (UI Layer - React Components)
 3. **Context Menu**: ตรวจสอบและตั้งค่า `disabled: engine.readonly` ใน Context Menu Items ที่เกี่ยวกับการแก้ไขข้อมูล
 4. **Popovers**: ใน `CustomCommentPopover` มีการรับ props `readonly` เพื่อซ่อนปุ่มและปิดการพิมพ์ข้อความ
 
+### How Fast Typing & Barcode Scanners Work
+
+เพื่อป้องกันปัญหาข้อมูลสูญหายจากการพิมพ์รัวๆ หรือการใช้ Barcode Scanner:
+1. **Keystroke Buffering**: ทันทีที่มีการพิมพ์ตัวแรกเข้า cell, `useKeyboard.ts` จะเรียก `startEditing`
+2. **State Accumulation**: หาก React ยัง render `CustomSheetCell` ไม่ทัน `useSheetEngine.ts` จะสะสมตัวอักษรเหล่านั้นไว้ใน `editingCell.initialValue`
+3. **Real-time Commit**: เมื่อผู้ใช้กด `Enter` หรือ `Tab` อย่างรวดเร็ว `useKeyboard.ts` จะเรียก `getEditingCell()` (ผ่าน `useRef` แทน `useState` เพื่อเลี่ยง state delay) และนำข้อมูลที่สะสมไว้ไปเซฟลงตารางโดยตรงผ่าน `setCellValue`
+
+### How Column Type Transitions Work
+
+เมื่อมีการเปลี่ยนประเภทข้อมูลคอลัมน์ผ่านเมนู (เรียกใช้ `updateColumnProps`):
+1. **Clear Data**: ระบบจะ **ล้างข้อมูลเดิมในเซลล์ทิ้ง (Clear)** เมื่อเปลี่ยนไปยัง type: `number`, `select`, หรือ `formula` เพื่อป้องกันปัญหา data mismatch
+2. **Preserve Data**: หากเปลี่ยนจาก `number` กลับมาเป็น `text`, `editable-text`, หรือ `readonly` ข้อมูลเดิมจะยังคงอยู่ไม่ถูกลบ
+
 ---
 
 ## File Relationships

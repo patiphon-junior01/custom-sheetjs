@@ -1031,8 +1031,15 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
             return updated;
           });
 
-          // Clear ค่าเซลล์ทั้งคอลัมน์เมื่อ dataType เปลี่ยน (ยกเว้น formula ที่จะคำนวณค่าใหม่เอง)
-          if (isDataTypeChanging && newDataType !== 'formula') {
+          // Clear ค่าเซลล์เมื่อเปลี่ยนเป็น select, formula 
+          // หรือถ้าเปลี่ยนเป็น number จะ clear เฉพาะช่องที่ไม่ใช่ตัวเลข (ถ้าเป็น "20,000" จะแปลงเป็น 20000 ให้)
+          const shouldProcessValues = isDataTypeChanging && (
+            newDataType === 'formula' || 
+            newDataType === 'select' || 
+            newDataType === 'number'
+          );
+
+          if (shouldProcessValues) {
             setBaseRows((prev) => {
               // Snapshot ค่าเก่าไว้ก่อน clear (สำหรับ undo)
               const snapshot: Record<string, any> = {};
@@ -1047,11 +1054,29 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
               return prev.map((row) => {
                 const cell = row.cells[colId];
                 if (!cell) return row;
+                
+                let newValue: any = '';
+
+                // ถ้าเปลี่ยนเป็น number ให้ลอง parse ค่าเดิมดู
+                if (newDataType === 'number' && cell.value !== undefined && cell.value !== null && cell.value !== '') {
+                  // ลบลูกน้ำออกเผื่อผู้ใช้พิมพ์ 20,000 มา
+                  const strVal = String(cell.value).replace(/,/g, '').trim();
+                  const numVal = Number(strVal);
+                  if (!isNaN(numVal)) {
+                    newValue = numVal; // แปลงสำเร็จ เก็บตัวเลขไว้
+                  }
+                }
+
+                // ข้ามถ้าเดิมก็ว่างอยู่แล้วและจะได้ค่าว่างเหมือนเดิม (ประหยัด memory)
+                if (newValue === '' && (cell.value === '' || cell.value === undefined || cell.value === null)) {
+                   return row;
+                }
+
                 return {
                   ...row,
                   cells: {
                     ...row.cells,
-                    [colId]: { ...cell, value: '' },
+                    [colId]: { ...cell, value: newValue },
                   },
                 };
               });
