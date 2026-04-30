@@ -83,6 +83,8 @@ export interface CreateFromDataOptions {
   columnTags?: SheetConfig['columnTags'];
   /** โหมดอ่านอย่างเดียว (Read-only) */
   readonly?: boolean;
+  /** ID ของ sheet (ใช้เป็น key สำหรับเก็บ layout ลง localStorage) */
+  sheetId?: string;
   /** รองรับ properties อื่นๆ ที่ consumer ต้องการ */
   [key: string]: any;
 }
@@ -225,6 +227,7 @@ export function createSheetConfigFromData(
     customContextMenuItems: options.customContextMenuItems,
     columnTags: options.columnTags,
     readonly: options.readonly,
+    sheetId: options.sheetId,
   };
 }
 
@@ -326,6 +329,7 @@ export function createSheetConfigFromApi(
     customContextMenuItems: options.customContextMenuItems,
     columnTags: options.columnTags,
     readonly: options.readonly,
+    sheetId: options.sheetId,
   };
 }
 

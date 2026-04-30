@@ -81,3 +81,7 @@ export { useKeyboard } from './useKeyboard';
 // Data Helpers
 export { createSheetConfigFromData, createSheetConfigFromApi, autoDetectColumns } from './helpers';
 export type { SimpleColumnConfig, CreateFromDataOptions, ApiColumnDefinition } from './helpers';
+
+// Column Layout Store (Zustand + LocalStorage)
+export { useColumnLayoutStore, useSheetColumnLayout } from './useColumnLayoutStore';
+export type { ColumnLayout, SheetColumnLayouts } from './useColumnLayoutStore';

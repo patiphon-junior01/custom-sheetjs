@@ -3,12 +3,13 @@
    useSheetEngine: state management + actions ทั้งหมด
    ========================================================================= */
 
-import { useState, useCallback, useRef, useMemo } from 'react';
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import type {
   SheetConfig, SheetRow, SheetColumn, SheetCell, Selection,
   CellPosition, CellComment, ActionLog, SavePayload,
   ChangedCell, UndoableCommand, SearchState, SortState, SortDirection,
 } from './types';
+import { useSheetColumnLayout } from './useColumnLayoutStore';
 import {
   EMPTY_SELECTION, EMPTY_SEARCH, EMPTY_SORT, createCell, createRow,
   createColumn, createActionLog,
@@ -120,11 +121,27 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
     allowDeleteRow = true,
     allowDeleteColumn = true,
     readonly = false,
+    sheetId,
   } = config;
+
+  // Column Layout Store (zustand + localStorage)
+  const columnLayout = useSheetColumnLayout(sheetId);
 
   // Core state
   const [baseRows, setBaseRows] = useState<SheetRow[]>(() => deepClone(initialRows));
-  const [columns, setColumns] = useState<SheetColumn[]>(() => deepClone(initialColumns));
+  const [columns, setColumns] = useState<SheetColumn[]>(() => {
+    const cloned = deepClone(initialColumns);
+    // โหลดความกว้างที่เคยบันทึกไว้จาก localStorage (ถ้ามี)
+    if (columnLayout.isEnabled) {
+      for (const col of cloned) {
+        const savedWidth = columnLayout.getWidth(col.id);
+        if (savedWidth !== undefined) {
+          col.width = savedWidth;
+        }
+      }
+    }
+    return cloned;
+  });
   const [selection, setSelection] = useState<Selection>(EMPTY_SELECTION);
   const [editingCell, setEditingCell] = useState<CellPosition | null>(null);
   const [search, setSearch] = useState<SearchState>(EMPTY_SEARCH);
@@ -928,8 +945,11 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
       undoRedo.execute(command);
       emitAction('column-resized', { colId, width: clampedWidth }, oldWidth, clampedWidth);
       callbacksRef.current?.onColumnResize?.(colId, clampedWidth);
+
+      // บันทึกความกว้างลง localStorage ผ่าน zustand store
+      columnLayout.setWidth(colId, clampedWidth);
     },
-    [undoRedo, emitAction]
+    [undoRedo, emitAction, columnLayout]
   );
 
   const renameColumn = useCallback(

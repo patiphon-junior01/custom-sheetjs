@@ -287,6 +287,8 @@ export interface SheetCallbacks {
 // ========== Sheet Config ==========
 
 export interface SheetConfig {
+  /** ID ของ sheet (ใช้เป็น key สำหรับเก็บ layout ลง localStorage, ถ้าไม่กำหนดจะไม่เก็บ) */
+  sheetId?: string;
   /** ข้อมูล rows เริ่มต้น */
   initialRows: SheetRow[];
   /** คอลัมน์ config */

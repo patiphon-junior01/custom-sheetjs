@@ -523,6 +523,7 @@ export default function CustomSheetDemoPage() {
   const config = useMemo((): SheetConfig => {
     // สร้าง config จาก API data (จำลองว่ารับจาก API โดยไม่รู้ type ล่วงหน้า)
     const baseConfig = createSheetConfigFromApi(API_COLUMNS, API_ROWS, {
+      sheetId: "demo-payroll-sheet",
       userName: "Admin",
       readonly: false,
       maxUndoHistory: 50,
