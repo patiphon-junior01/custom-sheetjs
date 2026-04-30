@@ -18,7 +18,7 @@ import { useUndoRedo } from './useUndoRedo';
 import {
   deepClone, moveArrayItem, insertArrayItem,
   getAllSelectedCells, isCellInSelection, generateId, expandRangesToCells,
-  computeRowFormulas
+  computeRowFormulas, rebuildTemplateFormulas
 } from './utils';
 
 /* =========================================================================
@@ -62,7 +62,7 @@ export interface UseSheetEngineReturn {
   moveColumn: (fromIndex: number, toIndex: number) => void;
   resizeColumn: (colId: string, width: number) => void;
   renameColumn: (colId: string, newTitle: string) => void;
-  updateColumnProps: (colId: string, props: Partial<Pick<SheetColumn, 'locked' | 'dataType' | 'options' | 'formula' | 'columnTag'>>) => void;
+  updateColumnProps: (colId: string, props: Partial<Pick<SheetColumn, 'locked' | 'dataType' | 'options' | 'formula' | 'columnTag' | 'formulaTemplate' | 'showNegativeRed' | 'forceNegativeDisplay'>>) => void;
 
   // Clipboard
   copySelection: () => void;
@@ -301,10 +301,10 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
       }
 
       // ======= SINGLE SET MODE =======
-      const rowIdx = currentRows.findIndex((r) => r.id === rowId);
-      if (rowIdx === -1) return;
+      const targetRow = currentRows.find((r) => r.id === rowId);
+      if (!targetRow) return;
 
-      const cell = currentRows[rowIdx].cells[colId];
+      const cell = targetRow.cells[colId];
       const col = currentCols.find((c) => c.id === colId);
       if (!cell || cell.disabled || !cell.editable || col?.locked) return;
 
@@ -324,35 +324,27 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
       const oldValue = cell.value;
       if (oldValue === parsedValue) return;
 
-      // Command สำหรับ undo
+      // Command สำหรับ undo (ค้นหาด้วย rowId แทน index เพื่อป้องกัน sort ทำลำดับเปลี่ยน)
       const command: UndoableCommand = {
         id: generateId('cmd'),
         type: 'cell-edited',
         description: `Edit cell [${rowId}:${colId}]`,
         execute: () => {
           setRows((prev) => {
-            const next = [...prev];
-            next[rowIdx] = {
-              ...next[rowIdx],
-              cells: {
-                ...next[rowIdx].cells,
-                [colId]: { ...next[rowIdx].cells[colId], value: parsedValue },
-              },
-            };
-            return next;
+            return prev.map((r) =>
+              r.id === rowId
+                ? { ...r, cells: { ...r.cells, [colId]: { ...r.cells[colId], value: parsedValue } } }
+                : r
+            );
           });
         },
         undo: () => {
           setRows((prev) => {
-            const next = [...prev];
-            next[rowIdx] = {
-              ...next[rowIdx],
-              cells: {
-                ...next[rowIdx].cells,
-                [colId]: { ...next[rowIdx].cells[colId], value: oldValue },
-              },
-            };
-            return next;
+            return prev.map((r) =>
+              r.id === rowId
+                ? { ...r, cells: { ...r.cells, [colId]: { ...r.cells[colId], value: oldValue } } }
+                : r
+            );
           });
         },
       };
@@ -589,7 +581,10 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
     if (!row) return;
     const col = columnsRef.current.find((c) => c.id === pos.colId);
     const cell = row.cells[pos.colId];
-    if (!cell || cell.disabled || !cell.editable || cell.mode === 'readonly' || cell.mode === 'text' || col?.locked) return;
+    if (!cell || cell.disabled || !cell.editable || col?.locked) return;
+    // ตรวจสอบ mode ที่มีผลจริง (column dataType > cell mode > column defaultMode)
+    const effectiveMode = col?.dataType || cell.mode || col?.defaultMode || 'text';
+    if (effectiveMode === 'readonly' || effectiveMode === 'text' || effectiveMode === 'formula') return;
     setEditingCell(pos);
 
     // เก็บ Range ณ ขณะนั้น เพื่อใช้ล็อกเป้าสำหรับ Bulk Edit
@@ -774,8 +769,26 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
       undoRedo.execute(command);
       emitAction('column-inserted', { position, referenceId, newId: colId }, null, newCol);
       callbacksRef.current?.onColumnInsert?.({ position, referenceId, newId: colId });
+
+      // Auto-rebuild formula templates หลังเพิ่มคอลัมน์ใหม่
+      const columnTags = config.columnTags || [];
+      if (columnTags.length > 0) {
+        // ใช้ setTimeout เพื่อให้ state อัปเดตเสร็จก่อน
+        setTimeout(() => {
+          setColumns((prev) => {
+            const { updatedColumns, changes } = rebuildTemplateFormulas(prev, columnTags);
+            if (changes.length > 0) {
+              changes.forEach((change) => {
+                callbacksRef.current?.onFormulaAutoUpdate?.(change);
+              });
+              return updatedColumns;
+            }
+            return prev;
+          });
+        }, 0);
+      }
     },
-    [allowInsertColumn, undoRedo, emitAction]
+    [allowInsertColumn, undoRedo, emitAction, config.columnTags]
   );
 
   const deleteColumns = useCallback(
@@ -840,8 +853,25 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
       undoRedo.execute(command);
       emitAction('column-deleted', { ids }, deletedCols, null);
       callbacksRef.current?.onColumnDelete?.({ ids });
+
+      // Auto-rebuild formula templates หลังลบคอลัมน์
+      const columnTags = config.columnTags || [];
+      if (columnTags.length > 0) {
+        setTimeout(() => {
+          setColumns((prev) => {
+            const { updatedColumns, changes } = rebuildTemplateFormulas(prev, columnTags);
+            if (changes.length > 0) {
+              changes.forEach((change) => {
+                callbacksRef.current?.onFormulaAutoUpdate?.(change);
+              });
+              return updatedColumns;
+            }
+            return prev;
+          });
+        }, 0);
+      }
     },
-    [allowDeleteColumn, undoRedo, emitAction]
+    [allowDeleteColumn, undoRedo, emitAction, config.columnTags]
   );
 
   const moveColumn = useCallback(
@@ -935,7 +965,7 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
   );
 
   const updateColumnProps = useCallback(
-    (colId: string, props: Partial<Pick<SheetColumn, 'locked' | 'dataType' | 'options' | 'formula' | 'columnTag'>>) => {
+    (colId: string, props: Partial<Pick<SheetColumn, 'locked' | 'dataType' | 'options' | 'formula' | 'columnTag' | 'formulaTemplate' | 'showNegativeRed' | 'forceNegativeDisplay'>>) => {
       const currentCols = columnsRef.current;
       const col = currentCols.find((c) => c.id === colId);
       if (!col) return;
@@ -946,28 +976,103 @@ export function useSheetEngine(config: SheetConfig): UseSheetEngineReturn {
         options: col.options,
         formula: col.formula,
         columnTag: col.columnTag,
+        formulaTemplate: col.formulaTemplate,
+        showNegativeRed: col.showNegativeRed,
+        forceNegativeDisplay: col.forceNegativeDisplay,
       };
+
+      // ตรวจสอบว่า dataType เปลี่ยนจริงหรือไม่ + ต้อง clear ค่าหรือไม่
+      const oldDataType = col.dataType || col.defaultMode || 'editable-text';
+      const newDataType = props.dataType;
+      const isDataTypeChanging = newDataType && newDataType !== oldDataType;
+
+      // เก็บค่าเซลล์เก่าไว้สำหรับ undo (snapshot ทำตอนเรียก function ก่อนสร้าง command)
+      // ใช้ setBaseRows callback form เพื่อเข้าถึง state ล่าสุดตอน execute
+      let savedOldCellValues: Record<string, any> | null = null;
 
       const command: UndoableCommand = {
         id: generateId('cmd'),
         type: 'column-props-updated',
         description: `Update column "${col.title}" props`,
         execute: () => {
-          setColumns((prev) =>
-            prev.map((c) => (c.id === colId ? { ...c, ...props } : c))
-          );
+          setColumns((prev) => {
+            const updated = prev.map((c) => (c.id === colId ? { ...c, ...props } : c));
+            // Auto-rebuild formula templates หลังจากอัปเดต props
+            const columnTags = config.columnTags || [];
+            if (columnTags.length > 0) {
+              const { updatedColumns, changes } = rebuildTemplateFormulas(updated, columnTags);
+              if (changes.length > 0) {
+                changes.forEach((change) => {
+                  callbacksRef.current?.onFormulaAutoUpdate?.(change);
+                });
+                return updatedColumns;
+              }
+            }
+            return updated;
+          });
+
+          // Clear ค่าเซลล์ทั้งคอลัมน์เมื่อ dataType เปลี่ยน (ยกเว้น formula ที่จะคำนวณค่าใหม่เอง)
+          if (isDataTypeChanging && newDataType !== 'formula') {
+            setBaseRows((prev) => {
+              // Snapshot ค่าเก่าไว้ก่อน clear (สำหรับ undo)
+              const snapshot: Record<string, any> = {};
+              for (const row of prev) {
+                const cell = row.cells[colId];
+                if (cell && cell.value !== undefined && cell.value !== null && cell.value !== '') {
+                  snapshot[row.id] = cell.value;
+                }
+              }
+              savedOldCellValues = snapshot;
+
+              return prev.map((row) => {
+                const cell = row.cells[colId];
+                if (!cell) return row;
+                return {
+                  ...row,
+                  cells: {
+                    ...row.cells,
+                    [colId]: { ...cell, value: '' },
+                  },
+                };
+              });
+            });
+          }
         },
         undo: () => {
-          setColumns((prev) =>
-            prev.map((c) => (c.id === colId ? { ...c, ...oldProps } : c))
-          );
+          setColumns((prev) => {
+            const reverted = prev.map((c) => (c.id === colId ? { ...c, ...oldProps } : c));
+            const columnTags = config.columnTags || [];
+            if (columnTags.length > 0) {
+              const { updatedColumns } = rebuildTemplateFormulas(reverted, columnTags);
+              return updatedColumns;
+            }
+            return reverted;
+          });
+
+          // คืนค่าเซลล์เดิมกลับมาเมื่อ undo
+          if (savedOldCellValues && Object.keys(savedOldCellValues).length > 0) {
+            setBaseRows((prev) =>
+              prev.map((row) => {
+                if (!(row.id in savedOldCellValues!)) return row;
+                const cell = row.cells[colId];
+                if (!cell) return row;
+                return {
+                  ...row,
+                  cells: {
+                    ...row.cells,
+                    [colId]: { ...cell, value: savedOldCellValues![row.id] },
+                  },
+                };
+              })
+            );
+          }
         },
       };
 
       undoRedo.execute(command);
       emitAction('column-props-updated', { colId, props }, oldProps, props);
     },
-    [undoRedo, emitAction]
+    [undoRedo, emitAction, config.columnTags]
   );
 
   // =============================================

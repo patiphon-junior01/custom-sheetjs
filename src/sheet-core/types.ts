@@ -68,6 +68,23 @@ export interface ColumnTagDefinition {
   [key: string]: any;
 }
 
+// ========== Formula Template ==========
+// สูตรสำเร็จรูปที่สร้างจาก columnTag โดยอัตโนมัติ
+// เช่น "SUM:income" จะรวมค่าทุกคอลัมน์ที่มี columnTag='income' และ dataType='number'
+
+export interface FormulaTemplate {
+  /** รหัส Template เช่น 'SUM:income', 'SUM:deduction' */
+  key: string;
+  /** ชื่อแสดงผล เช่น 'รวมรายได้ทั้งหมด' */
+  label: string;
+  /** ประเภท operation: 'SUM' (อนาคตอาจมี AVG, COUNT, etc.) */
+  operation: 'SUM';
+  /** อิงจาก columnTag key ไหน (เช่น 'income', 'deduction') */
+  targetTag: string;
+  /** icon สำหรับแสดงผล */
+  icon?: string;
+}
+
 // ========== Cell ==========
 
 export interface SheetCell {
@@ -117,8 +134,14 @@ export interface SheetColumn {
   cellStyle?: 'plain' | 'input-preview';
   /** ชุดคำสั่งสูตรคำนวณแบบ String (เช่น [baseSalary] + [bonus]) */
   formula?: string;
+  /** รหัส Formula Template ที่ใช้ (เช่น 'SUM:income') ระบบจะ rebuild สูตรให้อัตโนมัติเมื่อมีการเปลี่ยนแปลงคอลัมน์ */
+  formulaTemplate?: string;
   /** ประเภทคอลัมน์ (เช่น 'income' = รายได้, 'deduction' = รายหัก, 'info' = ข้อมูลทั่วไป) */
   columnTag?: string;
+  /** แสดงยอดติดลบเป็นสีแดง (สำหรับคอลัมน์สูตรเท่านั้น) default: true สำหรับ formula columns */
+  showNegativeRed?: boolean;
+  /** บังคับแสดงผลเป็นตัวเลขติดลบและเป็นสีแดง (เพื่อการแสดงผลเท่านั้น ไม่กระทบค่าจริงที่ใช้คำนวณ) เช่น การรวมยอดรายหัก */
+  forceNegativeDisplay?: boolean;
   /** รองรับ properties อื่นๆ ที่ consumer ต้องการเก็บเพิ่ม */
   [key: string]: any;
 }
@@ -250,6 +273,15 @@ export interface SheetCallbacks {
   onColumnResize?: (columnId: string, width: number) => void;
   onSave?: (payload: SavePayload) => void;
   onAction?: (action: ActionLog) => void;
+  /** เรียกเมื่อสูตร Template ถูก rebuild อัตโนมัติ (เช่น เมื่อเพิ่ม/ลบคอลัมน์ที่มี tag ตรง) */
+  onFormulaAutoUpdate?: (detail: {
+    colId: string;
+    columnTitle: string;
+    templateKey: string;
+    oldFormula: string;
+    newFormula: string;
+    affectedColumns: string[];
+  }) => void;
 }
 
 // ========== Sheet Config ==========

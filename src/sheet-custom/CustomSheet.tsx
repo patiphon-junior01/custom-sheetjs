@@ -22,7 +22,10 @@ import {
   useKeyboard,
   isCellInSelection,
   formatShortcut,
+  generateFormulaTemplates,
+  buildFormulaFromTemplate,
 } from "../sheet-core";
+import type { FormulaTemplate } from "../sheet-core";
 import { CustomSheetCell } from "./CustomSheetCell";
 import { CustomContextMenu } from "./CustomContextMenu";
 import { CustomCommentPopover } from "./CustomCommentPopover";
@@ -38,6 +41,10 @@ interface FormulaSetupModalProps {
   availableCols: { id: string; title: string }[];
   onSave: (formula: string) => void;
   onCancel: () => void;
+  /** Template สูตรสำเร็จรูปที่แนะนำ */
+  templates?: FormulaTemplate[];
+  /** เมื่อเลือก Template จะส่งคืน templateKey + formula */
+  onSelectTemplate?: (templateKey: string, formula: string) => void;
 }
 
 function FormulaSetupModal({
@@ -46,6 +53,8 @@ function FormulaSetupModal({
   availableCols,
   onSave,
   onCancel,
+  templates,
+  onSelectTemplate,
 }: FormulaSetupModalProps) {
   const [formula, setFormula] = useState(initialFormula);
   const inputRef = useRef<any>(null);
@@ -73,6 +82,70 @@ function FormulaSetupModal({
       cancelText="ยกเลิก"
       width={500}
     >
+      {/* Template Suggestions */}
+      {templates && templates.length > 0 && (
+        <div style={{ marginBottom: "16px", marginTop: "8px" }}>
+          <Text
+            type="secondary"
+            style={{ display: "block", marginBottom: "8px" }}
+          >
+            <i
+              className="fa-solid fa-wand-magic-sparkles"
+              style={{ marginRight: 6 }}
+            ></i>
+            สูตรแนะนำ (Template):
+          </Text>
+          <Space size={[8, 8]} wrap style={{ width: "100%" }}>
+            {templates.map((t) => (
+              <Tag
+                key={t.key}
+                color="green"
+                style={{
+                  cursor: "pointer",
+                  userSelect: "none",
+                  padding: "4px 12px",
+                  fontSize: "13px",
+                  borderRadius: "6px",
+                }}
+                onClick={() => {
+                  if (onSelectTemplate) {
+                    onSelectTemplate(t.key, t.key);
+                  }
+                }}
+              >
+                {t.icon && (
+                  <i className={t.icon} style={{ marginRight: 6 }}></i>
+                )}
+                {t.label}
+              </Tag>
+            ))}
+          </Space>
+          <div
+            style={{
+              borderBottom: "1px solid #f0f0f0",
+              margin: "12px 0 4px 0",
+              marginTop: "20px",
+              position: "relative",
+            }}
+          >
+            <span
+              style={{
+                background: "#fff",
+                padding: "0 8px",
+                position: "absolute",
+                top: "-10px",
+                left: "50%",
+                transform: "translateX(-50%)",
+                color: "#94a3b8",
+                fontSize: "12px",
+              }}
+            >
+              หรือกรอกสูตรเอง
+            </span>
+          </div>
+        </div>
+      )}
+
       <div style={{ marginBottom: "16px", marginTop: "16px" }}>
         <Text
           type="secondary"
@@ -150,7 +223,9 @@ export default function CustomSheet({
     if (engine.readonly) return;
 
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      const lastSaveIdx = engine.actionLogs.map((l) => l.type).lastIndexOf("save");
+      const lastSaveIdx = engine.actionLogs
+        .map((l) => l.type)
+        .lastIndexOf("save");
 
       let hasUnsavedChanges = false;
       for (let i = lastSaveIdx + 1; i < engine.actionLogs.length; i++) {
@@ -228,6 +303,32 @@ export default function CustomSheet({
     },
     [formulaModal, engine],
   );
+
+  // เมื่อ User เลือก Template สูตรสำเร็จรูป
+  const handleSelectTemplate = useCallback(
+    (templateKey: string) => {
+      if (!formulaModal) return;
+      const columnTags = config.columnTags || [];
+      const { formula } = buildFormulaFromTemplate(
+        templateKey,
+        engine.columns,
+        columnTags,
+      );
+      engine.updateColumnProps(formulaModal.colId, {
+        dataType: "formula",
+        formula,
+        formulaTemplate: templateKey,
+      });
+      setFormulaModal(null);
+    },
+    [formulaModal, engine, config.columnTags],
+  );
+
+  // สร้าง Formula Templates จาก columnTags
+  const formulaTemplates = useMemo(() => {
+    return generateFormulaTemplates(config.columnTags || []);
+  }, [config.columnTags]);
+
   const anchorRef = useRef<CellPosition | null>(null);
 
   // Column header inline rename
@@ -544,7 +645,7 @@ export default function CustomSheet({
         ...defaultFormats.map((f) => {
           // หาประเภทคอลัมน์ (Tags) ที่รองรับรูปแบบข้อมูลนี้
           const tagsForThisFormat = columnTags.filter(
-            (tag) => !tag.allowedFormats || tag.allowedFormats.includes(f.mode)
+            (tag) => !tag.allowedFormats || tag.allowedFormats.includes(f.mode),
           );
 
           let children: ContextMenuItem[] | undefined = undefined;
@@ -554,20 +655,32 @@ export default function CustomSheet({
               {
                 key: `tag-none-${f.mode}`,
                 label: "(ไม่ระบุประเภท)",
-                icon: !currentTag && currentType === f.mode ? "fa-solid fa-check" : "fa-regular fa-circle",
+                icon:
+                  !currentTag && currentType === f.mode
+                    ? "fa-solid fa-check"
+                    : "fa-regular fa-circle",
                 disabled: isCustomNode || engine.readonly,
                 onClick: () => {
-                  engine.updateColumnProps(cellPos.colId, { dataType: f.mode, columnTag: "" });
+                  engine.updateColumnProps(cellPos.colId, {
+                    dataType: f.mode,
+                    columnTag: "",
+                  });
                 },
               },
               { key: `div-sub-${f.mode}`, label: "", divider: true },
               ...tagsForThisFormat.map((tag) => ({
                 key: `tag-${tag.key}-${f.mode}`,
                 label: tag.label,
-                icon: currentTag === tag.key && currentType === f.mode ? "fa-solid fa-check" : tag.icon || "fa-regular fa-circle",
+                icon:
+                  currentTag === tag.key && currentType === f.mode
+                    ? "fa-solid fa-check"
+                    : tag.icon || "fa-regular fa-circle",
                 disabled: isCustomNode || engine.readonly,
                 onClick: () => {
-                  engine.updateColumnProps(cellPos.colId, { dataType: f.mode, columnTag: tag.key });
+                  engine.updateColumnProps(cellPos.colId, {
+                    dataType: f.mode,
+                    columnTag: tag.key,
+                  });
                 },
               })),
             ];
@@ -576,7 +689,10 @@ export default function CustomSheet({
           return {
             key: f.key,
             label: f.label,
-            icon: currentType === f.mode ? "fa-solid fa-check" : "fa-regular fa-circle",
+            icon:
+              currentType === f.mode
+                ? "fa-solid fa-check"
+                : "fa-regular fa-circle",
             disabled: isCustomNode || engine.readonly,
             children,
             onClick: () => {
@@ -588,7 +704,10 @@ export default function CustomSheet({
         {
           key: "type-formula",
           label: "สูตรคำนวณ (formula)",
-          icon: currentType === "formula" ? "fa-solid fa-check" : "fa-regular fa-circle",
+          icon:
+            currentType === "formula"
+              ? "fa-solid fa-check"
+              : "fa-regular fa-circle",
           disabled: isCustomNode || engine.readonly,
           onClick: () => openFormulaModal(cellPos.colId),
         },
@@ -626,6 +745,41 @@ export default function CustomSheet({
             engine.updateColumnProps(cellPos.colId, { locked: !isLocked }),
         },
         ...formatMenuItems,
+        // แสดง toggle "ยอดติดลบเป็นสีแดง" และ "บังคับแสดงเป็นค่าลบ" เฉพาะคอลัมน์สูตร
+        ...(currentType === "formula"
+          ? [
+              {
+                key: "toggle-force-negative",
+                label: col?.forceNegativeDisplay
+                  ? "ยกเลิกการแสดงเป็นยอดติดลบ"
+                  : "บังคับแสดงเป็นยอดติดลบ",
+                icon: col?.forceNegativeDisplay
+                  ? "fa-solid fa-minus-circle"
+                  : "fa-solid fa-minus",
+                disabled: engine.readonly,
+                onClick: () =>
+                  engine.updateColumnProps(cellPos.colId, {
+                    forceNegativeDisplay: !col?.forceNegativeDisplay,
+                  }),
+              },
+              {
+                key: "toggle-negative-red",
+                label:
+                  col?.showNegativeRed !== false
+                    ? "ปิดแสดงยอดติดลบสีแดง"
+                    : "เปิดแสดงยอดติดลบสีแดง",
+                icon:
+                  col?.showNegativeRed !== false
+                    ? "fa-solid fa-toggle-on"
+                    : "fa-solid fa-toggle-off",
+                disabled: engine.readonly,
+                onClick: () =>
+                  engine.updateColumnProps(cellPos.colId, {
+                    showNegativeRed: col?.showNegativeRed === false,
+                  }),
+              },
+            ]
+          : []),
         { key: "div1", label: "", divider: true },
         ...(allowInsertColumn
           ? [
@@ -1106,6 +1260,11 @@ export default function CustomSheet({
                           )}
                           {col.title}{" "}
                         </p>
+                        {(col?.title ?? "").length > 13 && (
+                          <Tooltip placement="top" title={col.title}>
+                            <QuestionCircleOutlined />
+                          </Tooltip>
+                        )}
                         {/* Sort Indicator */}
                         {isSortable && (
                           <span
@@ -1131,11 +1290,7 @@ export default function CustomSheet({
                             {!sortDir && <i className="fa-solid fa-sort"></i>}
                           </span>
                         )}
-                        {(col?.title ?? "").length > 20 && (
-                          <Tooltip placement="top" title={col.title}>
-                            <QuestionCircleOutlined />
-                          </Tooltip>
-                        )}
+
                         {/* แสดง tag badge สี ถ้าคอลัมน์มี columnTag */}
                         {/* {col.columnTag &&
                           config.columnTags &&
@@ -1332,6 +1487,8 @@ export default function CustomSheet({
           availableCols={formulaModal.availableCols}
           onSave={handleSaveFormula}
           onCancel={() => setFormulaModal(null)}
+          templates={formulaTemplates}
+          onSelectTemplate={handleSelectTemplate}
         />
       )}
     </div>

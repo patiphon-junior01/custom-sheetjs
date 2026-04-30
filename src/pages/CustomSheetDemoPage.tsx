@@ -96,11 +96,36 @@ const API_COLUMNS: ApiColumnDefinition[] = [
     columnTag: "deduction",
   },
   {
-    field: "netPay",
-    label: "สุทธิ",
-    type: "readonly",
+    field: "totalDeduction",
+    label: "รวมรายหัก",
+    type: "formula",
     width: 120,
     locked: true,
+    formula: "[deductTax] + [deductSocial]",
+    forceNegativeDisplay: true,
+  },
+  {
+    field: "targetPay",
+    label: "เป้ารับสุทธิ",
+    type: "number",
+    width: 120,
+  },
+  {
+    field: "netPay",
+    label: "สุทธิ",
+    type: "formula",
+    width: 130,
+    locked: true,
+    formula: "[baseSalary] + [allowance] + [overtime] + [bonus] - [deductTax] - [deductSocial]",
+  },
+  {
+    field: "diffFromTarget",
+    label: "ส่วนต่างจากเป้า",
+    type: "formula",
+    width: 150,
+    locked: true,
+    formula: "[baseSalary] + [allowance] + [overtime] + [bonus] - [deductTax] - [deductSocial] - [targetPay]",
+    showNegativeRed: true,
   },
   {
     field: "status",
@@ -143,7 +168,7 @@ const API_ROWS: Record<string, any>[] = [
     bonus: 10000,
     deductTax: 4200,
     deductSocial: 750,
-    netPay: 68050,
+    targetPay: 70000,
     status: "Approved",
     tags: ["React", "TypeScript", "Node.js"],
     note: "",
@@ -159,7 +184,7 @@ const API_ROWS: Record<string, any>[] = [
     bonus: 15000,
     deductTax: 4200,
     deductSocial: 750,
-    netPay: 76050,
+    targetPay: 80000,
     status: "Approved",
     tags: ["Recruitment", "Payroll", "Training"],
     note: "ปรับเงินเดือนใหม่",
@@ -175,7 +200,7 @@ const API_ROWS: Record<string, any>[] = [
     bonus: 5000,
     deductTax: 2100,
     deductSocial: 750,
-    netPay: 50150,
+    targetPay: 55000,
     status: "Pending",
     tags: ["Excel", "Tax", "Audit"],
     note: "",
@@ -191,7 +216,7 @@ const API_ROWS: Record<string, any>[] = [
     bonus: 8000,
     deductTax: 3000,
     deductSocial: 750,
-    netPay: 60250,
+    targetPay: 65000,
     status: "Draft",
     tags: ["SEO", "Content Strategy", "Ads"],
     note: "รอตรวจสอบ OT",
@@ -207,7 +232,7 @@ const API_ROWS: Record<string, any>[] = [
     bonus: 3000,
     deductTax: 1500,
     deductSocial: 750,
-    netPay: 40750,
+    targetPay: 45000,
     status: "Draft",
     tags: ["HTML", "CSS", "JS"],
     note: "",
@@ -223,7 +248,7 @@ const API_ROWS: Record<string, any>[] = [
     bonus: 5000,
     deductTax: 1800,
     deductSocial: 750,
-    netPay: 40450,
+    targetPay: 50000,
     status: "Pending",
     tags: ["Management", "Booking", "Support"],
     note: "",
@@ -544,6 +569,27 @@ export default function CustomSheetDemoPage() {
         onAction: (_action: ActionLog) => {
           // Already logged by useActionLogger
         },
+        onFormulaAutoUpdate: (detail: {
+          colId: string;
+          columnTitle: string;
+          templateKey: string;
+          oldFormula: string;
+          newFormula: string;
+          affectedColumns: string[];
+        }) => {
+          console.log(
+            "%c[Formula Template] Auto-rebuild triggered",
+            "color: #f59e0b; font-weight: bold;",
+            {
+              colId: detail.colId,
+              columnTitle: detail.columnTitle,
+              templateKey: detail.templateKey,
+              oldFormula: detail.oldFormula,
+              newFormula: detail.newFormula,
+              affectedColumns: detail.affectedColumns,
+            },
+          );
+        },
       },
       customContextMenuItems: [
         {
@@ -648,7 +694,7 @@ export default function CustomSheetDemoPage() {
     <div className="space-y-5 animate-fade-in">
       <PageHeader
         title="Custom Sheet (HTML)"
-        subtitle="Version 2: ข้อมูลจาก API แบบ Dynamic - ไม่ต้องรู้ Type ล่วงหน้า"
+        subtitle="สำหรับใช้งานเเละรองรับข้อมูลจาก API แบบ Dynamic"
         icon="fa-solid fa-code"
       />
 

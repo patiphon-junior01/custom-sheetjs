@@ -494,6 +494,16 @@
   z-index: 1001;
   animation: cs-fade-in 0.12s ease;
 }
+/* เปิด submenu ไปทางซ้ายเมื่อพื้นที่ขวาไม่พอ */
+.cs-context-submenu.submenu-left {
+  left: auto;
+  right: 100%;
+}
+/* เปิด submenu จากล่างขึ้นบนเมื่อพื้นที่ด้านล่างไม่พอ */
+.cs-context-submenu.submenu-up {
+  top: auto;
+  bottom: -1px;
+}
 .cs-context-item.has-submenu:hover > .cs-context-submenu {
   display: block;
 }
@@ -642,6 +652,16 @@
 .cs-sort-clear-btn:hover {
   background: #fef2f2;
   color: #dc2626;
+}
+
+/* ---- Negative Value (Formula) ---- */
+.cs-negative-value {
+  color: #dc2626 !important;
+  font-weight: 600;
+}
+.cs-td.mode-formula .cs-negative-value {
+  /* เพิ่มสัญลักษณ์ลูกศรลงเล็กๆ ข้างหน้าค่าลบ เพื่อให้เห็นชัด */
+  position: relative;
 }
 
 /* ---- Animations ---- */

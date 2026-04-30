@@ -31,6 +31,7 @@ export type {
   RowComponentProps,
   SearchState,
   ColumnTagDefinition,
+  FormulaTemplate,
   SortState,
   SortDirection,
 } from './types';
@@ -60,6 +61,9 @@ export {
   insertArrayItem,
   removeArrayItems,
   formatShortcut,
+  generateFormulaTemplates,
+  buildFormulaFromTemplate,
+  rebuildTemplateFormulas,
 } from './utils';
 
 // Hooks

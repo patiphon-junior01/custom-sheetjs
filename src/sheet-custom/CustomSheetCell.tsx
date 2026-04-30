@@ -46,22 +46,38 @@ export const CustomSheetCell = memo(function CustomSheetCell({
   const [localValue, setLocalValue] = useState(cell.value);
   const inputRef = useRef<HTMLInputElement>(null);
   const localValueRef = useRef(localValue);
+  const committedRef = useRef(false); // ป้องกัน double commit (Enter/Tab แล้ว Blur ซ้ำ)
+  const cellValueRef = useRef(cell.value); // เก็บ cell.value ล่าสุดเพื่อแก้ stale closure
+  const cancelledRef = useRef(false); // เมื่อ Escape จะไม่ commit ค่า
 
-  // Sync ref
+  // อัปเดต localValue พร้อม sync ref ทันที
+  const updateLocalValue = useCallback((val: any) => {
+    setLocalValue(val);
+    localValueRef.current = val;
+  }, []);
+
+  // Sync cellValueRef
   useEffect(() => {
-    localValueRef.current = localValue;
-  }, [localValue]);
+    cellValueRef.current = cell.value;
+  }, [cell.value]);
 
   // ซิงค์ localValue กับ cell.value เมื่อมีการแก้จากภายนอก
   useEffect(() => {
-    setLocalValue(cell.value);
-  }, [cell.value]);
+    if (!isEditing) {
+      updateLocalValue(cell.value);
+    }
+  }, [cell.value, isEditing, updateLocalValue]);
 
   // Focus Input เมื่อเปลี่ยนเป็นโหมด Editing
   useEffect(() => {
     if (isEditing) {
+      committedRef.current = false; // รีเซ็ตสถานะเมื่อเริ่ม edit ใหม่
+      cancelledRef.current = false;
       if (initialValue !== undefined) {
-        setLocalValue(initialValue);
+        updateLocalValue(initialValue);
+      } else {
+        // sync ค่า cell.value ล่าสุดลง ref
+        updateLocalValue(cell.value);
       }
       setTimeout(() => {
         if (inputRef.current) {
@@ -74,7 +90,7 @@ export const CustomSheetCell = memo(function CustomSheetCell({
         }
       }, 10);
     }
-  }, [isEditing, cell.value, initialValue]);
+  }, [isEditing, cell.value, initialValue, updateLocalValue]);
 
   const handleMouseDownCell = useCallback(
     (e: React.MouseEvent) => {
@@ -123,38 +139,62 @@ export const CustomSheetCell = memo(function CustomSheetCell({
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
       const newValue = e.target.value;
-      setLocalValue(newValue);
+      updateLocalValue(newValue);
       const effectiveMode = column.dataType || cell.mode || column.defaultMode || 'text';
       // สำหรับ select mode, commit ทันที
       if (effectiveMode === 'select') {
         onCellChange(row.id, column.id, newValue);
       }
     },
-    [column.dataType, cell.mode, column.defaultMode, onCellChange, row.id, column.id]
+    [column.dataType, cell.mode, column.defaultMode, onCellChange, row.id, column.id, updateLocalValue]
   );
 
   const handleInputBlur = useCallback(() => {
-    if (isEditing) {
+    if (isEditing && !committedRef.current && !cancelledRef.current) {
+      committedRef.current = true;
       const currentLocal = localValueRef.current;
-      if (currentLocal !== cell.value) {
+      if (currentLocal !== cellValueRef.current) {
         onCellChange(row.id, column.id, currentLocal);
       }
       onStopEditing();
     }
-  }, [isEditing, cell.value, onCellChange, row.id, column.id, onStopEditing]);
+  }, [isEditing, onCellChange, row.id, column.id, onStopEditing]);
 
   const handleInputKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        cancelledRef.current = true;
+        committedRef.current = true; // ป้องกัน blur commit
+        // คืนค่าเดิมกลับ
+        updateLocalValue(cellValueRef.current);
+        onStopEditing();
+        return;
+      }
       if (e.key === 'Enter') {
         e.preventDefault();
-        const currentLocal = localValueRef.current;
-        if (currentLocal !== cell.value) {
-           onCellChange(row.id, column.id, currentLocal);
+        if (!committedRef.current) {
+          committedRef.current = true;
+          const currentLocal = localValueRef.current;
+          if (currentLocal !== cellValueRef.current) {
+            onCellChange(row.id, column.id, currentLocal);
+          }
+          onStopEditing();
         }
-        onStopEditing();
+      }
+      if (e.key === 'Tab') {
+        // commit ค่าก่อนที่ keyboard handler จะ stopEditing
+        if (!committedRef.current) {
+          committedRef.current = true;
+          const currentLocal = localValueRef.current;
+          if (currentLocal !== cellValueRef.current) {
+            onCellChange(row.id, column.id, currentLocal);
+          }
+        }
+        // ไม่ preventDefault เพื่อให้ useKeyboard จัดการ Tab ย้ายช่องต่อ
       }
     },
-    [cell.value, onCellChange, row.id, column.id, onStopEditing]
+    [onCellChange, row.id, column.id, onStopEditing, updateLocalValue]
   );
 
   const handleCommentIndicatorClick = useCallback(
@@ -252,8 +292,11 @@ export const CustomSheetCell = memo(function CustomSheetCell({
         // ลองแปลงเป็นตัวเลข ถ้าแปลงได้ให้ใส่คอมม่า
         // ต้องเอา comma เดิมออกก่อน (ถ้ามี) เผื่อว่า val เป็น string ที่มีคอมม่าอยู่แล้ว
         const cleanVal = typeof val === 'string' ? val.replace(/,/g, '') : val;
-        const num = Number(cleanVal);
+        let num = Number(cleanVal);
         if (!isNaN(num) && val !== '#DIV/0!' && val !== '#ERROR') {
+          if (column.forceNegativeDisplay && num > 0) {
+            num = -num;
+          }
           return num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
         }
       }
@@ -286,15 +329,34 @@ export const CustomSheetCell = memo(function CustomSheetCell({
     }
 
     // Mode: text / readonly / formula -> แสดงข้อความอย่างเดียว
+    // สำหรับ formula: ตรวจสอบค่าติดลบ แสดงสีแดงเมื่อ showNegativeRed เปิด (default: true)
+    const isFormulaMode = effectiveMode === 'formula';
+    const showNegRed = isFormulaMode && (column.showNegativeRed !== false); // default true สำหรับ formula
+    const isNegativeValue = (() => {
+      if (!isFormulaMode) return false;
+      const val = cell.value;
+      if (val === undefined || val === null || val === '' || val === '#ERROR' || val === '#DIV/0!') return false;
+      const cleanVal = typeof val === 'string' ? val.replace(/,/g, '') : val;
+      let num = Number(cleanVal);
+      if (isNaN(num)) return false;
+      if (column.forceNegativeDisplay && num > 0) {
+        num = -num;
+      }
+      return showNegRed && num < 0;
+    })();
+
     const textColor = effectiveMode === 'readonly' 
        ? '#94a3b8' 
-       : effectiveMode === 'formula' 
-       ? '#0ea5e9' // สีฟ้าเพื่อบอกว่าช่องนี้มาจากการคำนวณ
+       : isFormulaMode 
+       ? (isNegativeValue ? '#dc2626' : '#0ea5e9') // สีแดงสำหรับค่าลบ, สีฟ้าสำหรับค่าปกติ
        : undefined;
 
     return (
       <div className="cs-cell-content">
-        <span className="cs-cell-text" style={textColor ? { color: textColor, fontWeight: effectiveMode === 'formula' ? 600 : 'normal' } : undefined}>
+        <span
+          className={`cs-cell-text${isNegativeValue ? ' cs-negative-value' : ''}`}
+          style={textColor ? { color: textColor, fontWeight: isFormulaMode ? 600 : 'normal' } : undefined}
+        >
           {formatDisplayValue(cell.value)}
         </span>
       </div>

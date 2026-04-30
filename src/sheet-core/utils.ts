@@ -2,7 +2,7 @@
    Custom Sheet System - Utility Functions
    ========================================================================= */
 
-import type { CellPosition, SheetRow, SheetColumn, Selection } from './types';
+import type { CellPosition, SheetRow, SheetColumn, Selection, ColumnTagDefinition, FormulaTemplate } from './types';
 
 /**
  * ตรวจสอบว่า cell อยู่ใน selection หรือไม่
@@ -226,4 +226,127 @@ export function formatShortcut(key: string): string {
   return key
     .replace('Mod', mac ? 'Cmd' : 'Ctrl')
     .replace('Alt', mac ? 'Option' : 'Alt');
+}
+
+// =========================================================================
+// Formula Template Engine
+// สร้างสูตรคำนวณสำเร็จรูปจาก columnTag อัตโนมัติ
+// =========================================================================
+
+/**
+ * สร้างรายการ FormulaTemplate จาก columnTags ที่มี allowedFormats รวม 'number'
+ * เฉพาะ tag ที่รองรับ 'number' เท่านั้นจึงจะมี template SUM ให้เลือก
+ */
+export function generateFormulaTemplates(columnTags: ColumnTagDefinition[]): FormulaTemplate[] {
+  return columnTags
+    .filter((tag) => {
+      // เฉพาะ tag ที่รองรับ number เท่านั้น
+      if (!tag.allowedFormats) return false;
+      return tag.allowedFormats.includes('number');
+    })
+    .map((tag) => ({
+      key: `SUM:${tag.key}`,
+      label: `รวม${tag.label}ทั้งหมด`,
+      operation: 'SUM' as const,
+      targetTag: tag.key,
+      icon: tag.icon || 'fa-solid fa-calculator',
+    }));
+}
+
+/**
+ * สร้างสูตรจริง (เช่น "[col1] + [col2] + [col3]") จาก FormulaTemplate
+ * โดยหาทุกคอลัมน์ที่ตรงกับ tag + dataType='number'
+ */
+export function buildFormulaFromTemplate(
+  templateKey: string,
+  columns: SheetColumn[],
+  columnTags: ColumnTagDefinition[]
+): { formula: string; affectedColumns: string[] } {
+  // parse template key: "SUM:income" -> operation=SUM, targetTag=income
+  const [operation, targetTag] = templateKey.split(':');
+  if (!operation || !targetTag) return { formula: '', affectedColumns: [] };
+
+  // หาคอลัมน์ที่ตรงกับ tag + เป็นตัวเลข (ไม่เอา formula/template columns)
+  const matchingCols = columns.filter(
+    (col) =>
+      col.columnTag === targetTag &&
+      col.dataType === 'number' &&
+      !col.formulaTemplate  // ไม่เอาคอลัมน์ที่ตัวเองเป็น template
+  );
+
+  if (matchingCols.length === 0) {
+    return { formula: '0', affectedColumns: [] };
+  }
+
+  const affectedColumns = matchingCols.map((col) => col.id);
+
+  switch (operation) {
+    case 'SUM':
+      return {
+        formula: matchingCols.map((col) => `[${col.id}]`).join(' + '),
+        affectedColumns,
+      };
+    default:
+      return { formula: '0', affectedColumns: [] };
+  }
+}
+
+/**
+ * สแกนทุกคอลัมน์ที่มี formulaTemplate แล้ว rebuild สูตรใหม่
+ * คืนค่า columns ที่อัปเดตแล้ว + รายการของ changes สำหรับ callback
+ */
+export function rebuildTemplateFormulas(
+  columns: SheetColumn[],
+  columnTags: ColumnTagDefinition[]
+): {
+  updatedColumns: SheetColumn[];
+  changes: {
+    colId: string;
+    columnTitle: string;
+    templateKey: string;
+    oldFormula: string;
+    newFormula: string;
+    affectedColumns: string[];
+  }[];
+} {
+  const changes: {
+    colId: string;
+    columnTitle: string;
+    templateKey: string;
+    oldFormula: string;
+    newFormula: string;
+    affectedColumns: string[];
+  }[] = [];
+
+  const updatedColumns = columns.map((col) => {
+    if (!col.formulaTemplate) return col;
+
+    const { formula: newFormula, affectedColumns } = buildFormulaFromTemplate(
+      col.formulaTemplate,
+      columns,
+      columnTags
+    );
+
+    const oldFormula = col.formula || '';
+
+    // ถ้าสูตรไม่เปลี่ยนก็ไม่ต้องอัปเดต
+    if (oldFormula === newFormula) return col;
+
+    changes.push({
+      colId: col.id,
+      columnTitle: col.title,
+      templateKey: col.formulaTemplate,
+      oldFormula,
+      newFormula,
+      affectedColumns,
+    });
+
+    return {
+      ...col,
+      formula: newFormula,
+      dataType: 'formula' as const,
+    };
+  });
+
+  return { updatedColumns, changes };
 }

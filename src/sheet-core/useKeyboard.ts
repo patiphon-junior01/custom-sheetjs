@@ -88,7 +88,8 @@ export function useKeyboard({ containerRef, engine, enabled = true }: UseKeyboar
       // =============================================
       if (e.key === 'Escape') {
         if (eng.editingCell) {
-          eng.stopEditing();
+          // ปล่อยให้ Cell component จัดการ Escape เอง (revert ค่า + stopEditing)
+          return;
         } else {
           eng.clearSelection();
         }
